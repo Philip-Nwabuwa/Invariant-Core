@@ -1,0 +1,67 @@
+# Invariant Core + Reconcile
+
+A simulated instant-payments transfer engine and strictly-consistent double-entry ledger, paired with a reconciliation CLI that proves — after settlement — that what the system *thinks* happened matches what *actually* settled.
+
+This is a portfolio-grade systems project built around a real Nigerian problem: failed inter-bank transfers where a customer is **debited but the beneficiary is never credited**. NIBSS Instant Payments (NIP) moved roughly ₦1.07 quadrillion across 11.2 billion transactions in 2024, and the CBN's instant-EFT regulation requires a failed transfer to be reversed within 24 hours or it attracts a ₦10,000-per-item penalty. The hard engineering truth is that the enemy is not downtime — it is *inconsistency*.
+
+> **Sandbox only.** This system never touches real money, real bank rails, or real BVN/NIN data. It runs entirely against mocks and generated files. See the disclaimer at the bottom.
+
+## The shape of it
+
+Two flows converge on reconciliation. Prevention happens in real time on the left; detection happens after settlement on the right.
+
+![Data flow](docs/diagrams/data-flow.svg)
+
+- **Left (prevention):** the switch moves money through a flaky simulated rail and records every movement in a double-entry ledger. Idempotency, a transaction state machine, and a transactional outbox guarantee that a debit always has a matching credit or reversal.
+- **Right (detection):** an external settlement file is normalized by an adapter into the **same canonical transaction record** the ledger exports. Both sides feed the Reconcile CLI.
+- **The middle (the contract):** a single canonical transaction record both sides conform to. This shared shape is what makes matching possible at all.
+- **The dashed loop:** when Reconcile finds a pending reversal that never settled, it kicks the exception back to the switch to re-reverse or alert. Detection feeding corrective action.
+
+## Components
+
+| Component | Path | What it does |
+|---|---|---|
+| `ledger` | `cmd/ledger`, `internal/ledger` | Owns accounts and an append-only, double-entry journal. Enforces the conservation invariant: every transaction's debits equal its credits. |
+| `switchd` | `cmd/switchd`, `internal/switch` | The transfer engine. Runs the state machine, holds idempotency, talks to the rail, posts to the ledger, drives reversals via the outbox. |
+| `mockrail` | `cmd/mockrail`, `internal/mockrail` | A simulated NIP rail that injects configurable latency, timeouts, duplicate callbacks, and failures so reversal logic can be tested against chaos. |
+| `reconcile` | `cmd/reconcile`, `internal/reconcile` | A Cobra CLI: ingests the ledger export + an external settlement file, matches them, and emits a categorized exceptions report. Deterministic and re-runnable. |
+
+The canonical contract lives in `pkg/canonical` — deliberately in `pkg/` (not `internal/`) because it is the one type every component shares.
+
+## Tech stack (summary)
+
+Go 1.22+ · PostgreSQL 16 · Redis 7 · gRPC + protobuf (buf) · REST via chi for the public transfer API · sqlc + pgx for type-safe DB access · golang-migrate · Cobra + Viper for the CLI · slog + Prometheus + OpenTelemetry for observability · testcontainers-go and property-based tests · k6 for load. Full rationale in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Quickstart
+
+```bash
+cp .env.example .env          # configure local ports, DB URL, rail failure rates
+make dev                      # start postgres, redis, jaeger via docker-compose
+make migrate-up               # apply db/migrations
+make seed                     # create system + demo accounts
+
+make run-ledger               # terminal 1
+make run-mockrail             # terminal 2
+make run-switchd              # terminal 3
+
+# fire a transfer at the switch's REST API
+curl -X POST localhost:8080/v1/transfers \
+  -H 'Idempotency-Key: 11111111-1111-1111-1111-111111111111' \
+  -d '{"reference":"NIP-DEMO-001","source":"CUST-001","destination":"CUST-002","amount_minor":500000,"currency":"NGN"}'
+
+# generate a settlement file with injected discrepancies, then reconcile
+make gen-settlement
+make reconcile INTERNAL=./out/ledger-export.csv EXTERNAL=./out/nibss-settlement.csv
+```
+
+## Docs
+
+- [docs/PRD.md](docs/PRD.md) — problem, goals, requirements, success metrics.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, the canonical contract, state machine, consistency patterns, folder structure, tools, ADRs, testing.
+- [docs/DESIGN-NOTES.md](docs/DESIGN-NOTES.md) — refinements & known edges: in-doubt status-query before reversal, suspense-account contention, and other deliberate decisions.
+- [docs/ROADMAP.md](docs/ROADMAP.md) — the 12-week / 6-sprint build plan with stories, definitions of done, and portfolio checkpoints.
+- [db/schema.sql](db/schema.sql) — the full reference Postgres schema.
+
+## Disclaimer
+
+Invariant Core is an educational simulation. It does not implement ISO 8583 against any live switch, does not connect to NIBSS or any bank, and does not process real funds or real identity data. Handling real KYC data or live financial rails in Nigeria carries obligations under the Nigeria Data Protection Act 2023 and CBN licensing that are far outside the scope of a portfolio project. Build against the sandbox; say so plainly.

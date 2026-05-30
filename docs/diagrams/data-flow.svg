@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="640" viewBox="0 0 860 640" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <style>
+      .box   { fill:#f8fafc; stroke:#334155; stroke-width:1.5; rx:8; }
+      .prev  { fill:#eef2ff; stroke:#4338ca; }
+      .det   { fill:#ecfdf5; stroke:#047857; }
+      .contract { fill:#fffbeb; stroke:#b45309; }
+      .title { font-size:15px; font-weight:600; fill:#0f172a; }
+      .sub   { font-size:11px; fill:#475569; }
+      .edge  { stroke:#334155; stroke-width:1.5; fill:none; marker-end:url(#arrow); }
+      .edge2 { stroke:#334155; stroke-width:1.5; fill:none; marker-start:url(#arrow); marker-end:url(#arrow); }
+      .feedback { stroke:#b45309; stroke-width:1.5; fill:none; stroke-dasharray:6 4; marker-end:url(#arrow); }
+      .lbl   { font-size:11px; fill:#334155; }
+      .lblf  { font-size:11px; fill:#b45309; font-weight:600; }
+      .hdr   { font-size:12px; font-weight:700; letter-spacing:.05em; }
+    </style>
+  </defs>
+
+  <text x="150" y="40" class="hdr" fill="#4338ca">PREVENTION (real time)</text>
+  <text x="600" y="40" class="hdr" fill="#047857">DETECTION (after settlement)</text>
+
+  <!-- transfer request in -->
+  <text x="40" y="108" class="lbl">transfer request</text>
+  <line x1="40" y1="118" x2="98" y2="118" class="edge"/>
+
+  <!-- switchd -->
+  <rect class="box prev" x="100" y="90" width="190" height="64" rx="8"/>
+  <text x="195" y="118" text-anchor="middle" class="title">switchd</text>
+  <text x="195" y="138" text-anchor="middle" class="sub">transfer engine + state machine</text>
+
+  <!-- mockrail -->
+  <rect class="box prev" x="560" y="90" width="220" height="64" rx="8"/>
+  <text x="670" y="114" text-anchor="middle" class="title">mockrail</text>
+  <text x="670" y="133" text-anchor="middle" class="sub">chaos: timeouts, duplicates,</text>
+  <text x="670" y="147" text-anchor="middle" class="sub">declines (seedable)</text>
+
+  <!-- switchd <-> mockrail -->
+  <line x1="292" y1="122" x2="558" y2="122" class="edge2"/>
+  <text x="425" y="113" text-anchor="middle" class="lbl">injects timeouts / failures</text>
+
+  <!-- switchd -> ledger -->
+  <line x1="195" y1="156" x2="195" y2="228" class="edge"/>
+  <text x="205" y="196" class="lbl">posts balanced entries</text>
+
+  <!-- ledger -->
+  <rect class="box prev" x="100" y="230" width="190" height="64" rx="8"/>
+  <text x="195" y="258" text-anchor="middle" class="title">ledger</text>
+  <text x="195" y="278" text-anchor="middle" class="sub">append-only double-entry journal</text>
+
+  <!-- settlement file -->
+  <rect class="box det" x="560" y="230" width="220" height="64" rx="8"/>
+  <text x="670" y="258" text-anchor="middle" class="title">settlement file</text>
+  <text x="670" y="278" text-anchor="middle" class="sub">NIBSS-style external truth</text>
+
+  <!-- ledger export -> canonical -->
+  <path class="edge" d="M195,296 L195,360 L298,360"/>
+  <text x="205" y="330" class="lbl">export</text>
+
+  <!-- settlement adapter -> canonical -->
+  <path class="edge" d="M670,296 L670,360 L562,360"/>
+  <text x="585" y="330" class="lbl">adapter normalizes</text>
+
+  <!-- canonical record (the contract) -->
+  <rect class="box contract" x="300" y="332" width="260" height="60" rx="8"/>
+  <text x="430" y="358" text-anchor="middle" class="title">canonical transaction record</text>
+  <text x="430" y="378" text-anchor="middle" class="sub">the one shared contract (pkg/canonical)</text>
+
+  <!-- canonical -> reconcile -->
+  <line x1="430" y1="394" x2="430" y2="450" class="edge"/>
+
+  <!-- reconcile -->
+  <rect class="box det" x="300" y="452" width="260" height="60" rx="8"/>
+  <text x="430" y="478" text-anchor="middle" class="title">reconcile</text>
+  <text x="430" y="498" text-anchor="middle" class="sub">streaming matcher (deterministic)</text>
+
+  <!-- reconcile -> exceptions report -->
+  <line x1="562" y1="482" x2="648" y2="482" class="edge"/>
+  <rect class="box" x="650" y="455" width="170" height="54" rx="8"/>
+  <text x="735" y="487" text-anchor="middle" class="title">exceptions report</text>
+
+  <!-- feedback loop: reconcile -> switchd -->
+  <path class="feedback" d="M300,500 L40,500 L40,140 L98,140"/>
+  <text x="52" y="320" class="lblf" transform="rotate(-90 52,320)">pending_reversal feedback</text>
+</svg>
