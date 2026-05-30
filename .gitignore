@@ -1,0 +1,17 @@
+# Binaries
+/bin/
+/reconcile
+
+# Local env / secrets
+.env
+
+# Generated output (settlement files, ledger exports, reports)
+/out/
+
+# Test / coverage artifacts
+*.out
+coverage.*
+*.test
+
+# OS / editor cruft
+.DS_Store

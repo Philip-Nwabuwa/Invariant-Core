@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: invariantcore
+      POSTGRES_PASSWORD: invariantcore
+      POSTGRES_DB: invariantcore
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invariantcore"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # All-in-one Jaeger: collector + query UI, no config needed.
+  # OTLP gRPC on 4317; UI on http://localhost:16686
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # UI
+      - "4317:4317"     # OTLP gRPC
+
+  # Optional: uncomment to add Prometheus. Needs deployments/prometheus.yml.
+  # prometheus:
+  #   image: prom/prometheus:v2.53.0
+  #   volumes:
+  #     - ./deployments/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   ports:
+  #     - "9090:9090"
+
+volumes:
+  pgdata:
