@@ -1,0 +1,168 @@
+{
+  "info": {
+    "name": "Invariant Core — Sprint 0",
+    "description": "Manual-testing collection for the Invariant Core walking skeleton. Sprint 0 exposes only /healthz and /metrics per service; the transfer REST API arrives in Sprint 2 and drops into a new \"Transfers\" folder. Service URLs are collection variables (ledger_url, switchd_url, mockrail_url) so the collection retargets without editing requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "ledger_url", "value": "http://localhost:8081", "type": "string" },
+    { "key": "switchd_url", "value": "http://localhost:8080", "type": "string" },
+    { "key": "mockrail_url", "value": "http://localhost:8082", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "ledger /healthz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ledger_url}}/healthz",
+              "host": ["{{ledger_url}}"],
+              "path": ["healthz"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status field is ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "switchd /healthz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{switchd_url}}/healthz",
+              "host": ["{{switchd_url}}"],
+              "path": ["healthz"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status field is ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mockrail /healthz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mockrail_url}}/healthz",
+              "host": ["{{mockrail_url}}"],
+              "path": ["healthz"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('status field is ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "ledger /metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{ledger_url}}/metrics",
+              "host": ["{{ledger_url}}"],
+              "path": ["metrics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('exposes prometheus metrics', function () { pm.expect(pm.response.text()).to.include('go_goroutines'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "switchd /metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{switchd_url}}/metrics",
+              "host": ["{{switchd_url}}"],
+              "path": ["metrics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('exposes prometheus metrics', function () { pm.expect(pm.response.text()).to.include('go_goroutines'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "mockrail /metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{mockrail_url}}/metrics",
+              "host": ["{{mockrail_url}}"],
+              "path": ["metrics"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('exposes prometheus metrics', function () { pm.expect(pm.response.text()).to.include('go_goroutines'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
