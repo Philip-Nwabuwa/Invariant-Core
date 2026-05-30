@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package switch.v1;
+
+option go_package = "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1";
+
+// SwitchService is the internal gRPC surface of the transfer engine. Sprint 0
+// defines only a health Ping; rail-callback intake and the corrective endpoint
+// are added in Sprints 2-3.
+service SwitchService {
+  // Ping is a liveness check used while the real surface is being built.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// PingRequest is an empty liveness request.
+message PingRequest {}
+
+// PingResponse echoes service liveness.
+message PingResponse {
+  // ok is true when the service is serving.
+  bool ok = 1;
+}

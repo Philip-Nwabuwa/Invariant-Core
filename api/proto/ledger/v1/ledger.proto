@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package ledger.v1;
+
+option go_package = "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/ledger/v1;ledgerv1";
+
+// LedgerService is the gRPC surface of the ledger. Sprint 0 defines only a
+// health Ping; PostTransaction, GetBalance, ListEntries, and ExportTransactions
+// are added in Sprint 1.
+service LedgerService {
+  // Ping is a liveness check used while the real surface is being built.
+  rpc Ping(PingRequest) returns (PingResponse);
+}
+
+// PingRequest is an empty liveness request.
+message PingRequest {}
+
+// PingResponse echoes service liveness.
+message PingResponse {
+  // ok is true when the service is serving.
+  bool ok = 1;
+}
