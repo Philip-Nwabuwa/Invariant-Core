@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package mockrail.v1;
+
+option go_package = "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/mockrail/v1;mockrailv1";
+
+// RailService simulates the NIP rail (ARCHITECTURE §2.3). v1 (NS-204) always
+// succeeds after a configurable latency; seedable chaos — decline, hard
+// timeout, duplicate callbacks — arrives in Sprint 3.
+service RailService {
+  // SendToRail submits a transfer to the rail and reports the outcome.
+  rpc SendToRail(SendToRailRequest) returns (SendToRailResponse);
+  // QueryStatus is a Transaction Status Query (TSQ): given a transfer's
+  // reference, the rail reports whether it settled. The switch issues it to
+  // resolve an in-doubt transfer before deciding to reverse (DESIGN-NOTES §1).
+  rpc QueryStatus(QueryStatusRequest) returns (QueryStatusResponse);
+}
+
+// SendToRailRequest is one transfer leg handed to the rail.
+message SendToRailRequest {
+  string reference = 1;
+  string source = 2;
+  string destination = 3;
+  int64 amount_minor = 4;
+  string currency = 5;
+}
+
+// RailStatus is the rail's verdict on a leg.
+enum RailStatus {
+  RAIL_STATUS_UNSPECIFIED = 0;
+  RAIL_STATUS_SUCCESS = 1;
+  // RAIL_STATUS_DECLINED is an explicit refusal; the switch reverses.
+  RAIL_STATUS_DECLINED = 2;
+}
+
+// SendToRailResponse is the rail's reply.
+message SendToRailResponse {
+  RailStatus status = 1;
+  // rail_reference is the rail's own id for the leg.
+  string rail_reference = 2;
+}
+
+// QueryStatusRequest asks the rail about a transfer by its reference.
+message QueryStatusRequest {
+  string reference = 1;
+}
+
+// QueryStatusResponse is the rail's settlement verdict for the reference.
+// UNSPECIFIED means the rail could not determine the outcome (still in doubt).
+message QueryStatusResponse {
+  RailStatus status = 1;
+}

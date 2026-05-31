@@ -44,10 +44,14 @@ make run-ledger               # terminal 1
 make run-mockrail             # terminal 2
 make run-switchd              # terminal 3
 
-# fire a transfer at the switch's REST API
-curl -X POST localhost:8080/v1/transfers \
+# fire a transfer at the switch's REST API — returns 202 Accepted at DEBITED;
+# settlement completes asynchronously via the outbox.
+curl -i -X POST localhost:8080/v1/transfers \
   -H 'Idempotency-Key: 11111111-1111-1111-1111-111111111111' \
   -d '{"reference":"NIP-DEMO-001","source":"CUST-001","destination":"CUST-002","amount_minor":500000,"currency":"NGN"}'
+
+# poll until terminal (SETTLED / REVERSED / FAILED) — substitute the id from the POST
+curl localhost:8080/v1/transfers/<id>
 
 # generate a settlement file with injected discrepancies, then reconcile
 make gen-settlement

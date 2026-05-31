@@ -1,5 +1,7 @@
 services:
   postgres:
+    # Pinned to match the testcontainers test harness; the engine version must
+    # be consistent across dev, test, and CI.
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: invariantcore

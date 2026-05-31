@@ -77,48 +77,48 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 **Decisions:** sqlc package `ledgerdb` → `internal/ledger/postgres/ledgerdb`, queries in `internal/ledger/postgres/queries`, `pgx/v5` pool · ledger writes at `SERIALIZABLE` with a bounded retry on SQLSTATE `40001` (ADR-0002) · domain layer in `internal/ledger`, gRPC server in `cmd/ledger` on `:50051` (replaces the Sprint-0 Ping-only surface) · property lib `pgregory.net/rapid`.
 
 ## NS-101 · Repositories — `accounts` + `entries` + `transactions` (sqlc/pgx)
-- [ ] `internal/ledger/postgres/queries/accounts.sql` — `CreateAccount`, `GetAccountByCode`, `GetAccountByID`.
-- [ ] `internal/ledger/postgres/queries/transactions.sql` — `InsertTransaction`, `GetTransaction`, `ListTransactionsByWindow`.
-- [ ] `internal/ledger/postgres/queries/entries.sql` — `InsertEntry`, `ListEntriesByTransaction`, `ListEntriesByAccount`, `SumEntriesByAccount` (derived balance).
-- [ ] `internal/ledger/postgres/queries/balances.sql` — `GetCachedBalance`, `UpsertCachedBalance`.
-- [ ] `make sqlc` generates `internal/ledger/postgres/ledgerdb`; commit the generated code.
-- [ ] `internal/ledger/postgres/pool.go` — `pgxpool` constructor from `DB_URL`; wire into `cmd/ledger`.
-- [ ] `internal/ledger/postgres/repository.go` — repository over `ledgerdb.Queries` + a `WithSerializableTx(ctx, fn)` tx runner.
+- [x] `internal/ledger/postgres/queries/accounts.sql` — `CreateAccount`, `GetAccountByCode`, `GetAccountByID`.
+- [x] `internal/ledger/postgres/queries/transactions.sql` — `InsertTransaction`, `GetTransaction`, `ListTransactionsByWindow`.
+- [x] `internal/ledger/postgres/queries/entries.sql` — `InsertEntry`, `ListEntriesByTransaction`, `ListEntriesByAccount`, `SumEntriesByAccount` (derived balance).
+- [x] `internal/ledger/postgres/queries/balances.sql` — `GetCachedBalance`, `UpsertCachedBalance`.
+- [x] `make sqlc` generates `internal/ledger/postgres/ledgerdb`; commit the generated code. (sqlc.yaml: uuid→google/uuid, timestamptz→time.Time overrides.)
+- [x] `internal/ledger/postgres/pool.go` — `pgxpool` constructor from `DB_URL`; wire into `cmd/ledger`. (constructor done; cmd/ledger wiring lands in NS-106.)
+- [x] `internal/ledger/postgres/repository.go` — repository over `ledgerdb.Queries` + a `WithSerializableTx(ctx, fn)` tx runner.
 
 ## NS-102 · `PostTransaction` at SERIALIZABLE (FR-L1/L2)
-- [ ] Domain types `internal/ledger/{account,entry,transaction}.go` — `EntryInput{AccountCode, Direction, Amount money.Amount}`, `PostRequest{Reference, Type, Entries…}`.
-- [ ] `internal/ledger/service.go` `PostTransaction`: open a SERIALIZABLE tx → insert transaction → insert entries → commit; application-side balance check (`sum(debits) == sum(credits)`) before commit, with the DEFERRED DB trigger as backstop.
-- [ ] Typed errors: `ErrUnbalanced`, `ErrTooFewEntries` (<2), `ErrMixedCurrency`, `ErrUnknownAccount`.
-- [ ] Serialization-failure retry wrapper: detect pgx `40001`, retry with bounded attempts + backoff (ADR-0002).
-- [ ] Unit tests: balanced posts succeed; unbalanced / single-entry / mixed-currency are rejected.
+- [x] Domain types `internal/ledger/{account,entry,transaction}.go` — `EntryInput{AccountCode, Direction, Amount money.Amount}`, `PostRequest{Reference, Type, Entries…}`.
+- [x] `internal/ledger/service.go` `PostTransaction`: open a SERIALIZABLE tx → insert transaction → insert entries → commit; application-side balance check (`sum(debits) == sum(credits)`) before commit, with the DEFERRED DB trigger as backstop.
+- [x] Typed errors: `ErrUnbalanced`, `ErrTooFewEntries` (<2), `ErrMixedCurrency`, `ErrUnknownAccount`. (Plus `ErrNonPositiveAmount`.)
+- [x] Serialization-failure retry wrapper: detect pgx `40001`, retry with bounded attempts + backoff (ADR-0002).
+- [x] Unit tests: balanced posts succeed; unbalanced / single-entry / mixed-currency are rejected.
 
 ## NS-103 · `GetBalance` derived + optional cache (FR-L4)
-- [ ] `GetBalance(accountCode)` derives from entries via `SumEntriesByAccount`, applying the account's normal-balance direction (asset/expense debit-normal; liability/equity/revenue credit-normal).
-- [ ] Update `account_balances` in the **same** serializable txn as `PostTransaction` (optional cache).
-- [ ] Test: derived balance == cached balance after a random series of posts.
+- [x] `GetBalance(accountCode)` derives from entries via `SumEntriesByAccount`, applying the account's normal-balance direction (asset/expense debit-normal; liability/equity/revenue credit-normal).
+- [x] Update `account_balances` in the **same** serializable txn as `PostTransaction` (optional cache).
+- [x] Test: derived balance == cached balance after a random series of posts.
 
 ## NS-104 · Append-only enforcement (FR-L3)
-- [ ] Audit the repository: entries are insert-only — no UPDATE/DELETE path anywhere.
-- [ ] Test asserting the DB trigger `trg_entries_no_update` rejects a raw UPDATE and a DELETE on `entries` (expect error).
+- [x] Audit the repository: entries are insert-only — no UPDATE/DELETE path anywhere.
+- [x] Test asserting the DB trigger `trg_entries_no_update` rejects a raw UPDATE and a DELETE on `entries` (expect error).
 
 ## NS-105 · Property-based conservation test (AC-2)
-- [ ] Add `pgregory.net/rapid` to `go.mod`.
-- [ ] Property: generate random *balanced* transaction sets across N seeded accounts; after posting all, assert the sum of every account balance equals the starting total (value conserved).
-- [ ] Property: generated *unbalanced* sets are always rejected by `PostTransaction` (never committed).
+- [x] Add `pgregory.net/rapid` to `go.mod`.
+- [x] Property: generate random *balanced* transaction sets across N seeded accounts; after posting all, assert the sum of every account balance equals the starting total (value conserved).
+- [x] Property: generated *unbalanced* sets are always rejected by `PostTransaction` (never committed).
 
 ## NS-106 · ledger gRPC surface + `ExportTransactions` (FR-L5)
-- [ ] Expand `api/proto/ledger/v1/ledger.proto`: `PostTransaction`, `GetBalance`, `GetAccount`, `ListEntries`, `ExportTransactions(window)`; keep `Ping`. `make proto`.
-- [ ] `internal/ledger/grpc.go` — gRPC server mapping proto ⇄ domain; register on `:50051` in `cmd/ledger` (replace the empty `serviceboot` surface).
-- [ ] `ExportTransactions` streams `canonical.Record`s for a time window (status/type/amounts mapped from the journal).
-- [ ] Mapping unit test (proto ⇄ `canonical.Record`) + a gRPC smoke test.
+- [x] Expand `api/proto/ledger/v1/ledger.proto`: `PostTransaction`, `GetBalance`, `GetAccount`, `ListEntries`, `ExportTransactions(window)`; keep `Ping`. `make proto`.
+- [x] `internal/ledger/grpc.go` — gRPC server mapping proto ⇄ domain; register on `:50051` in `cmd/ledger` (replace the empty `serviceboot` surface). (serviceboot gained `RegisterGRPC`/`Cleanup` hooks.)
+- [x] `ExportTransactions` streams `canonical.Record`s for a time window (status/type/amounts mapped from the journal).
+- [x] Mapping unit test (proto ⇄ `canonical.Record`) + a gRPC smoke test.
 
-## Verification (Sprint 1 DoD)
-1. [ ] `make sqlc` + `make proto` regenerate cleanly; `make build` green.
-2. [ ] `go test ./... -race` green, including the `rapid` conservation property (AC-2).
-3. [ ] `make seed`, then post a balanced transfer over gRPC; `GetBalance` matches the hand-computed figure.
-4. [ ] Drop the `account_balances` cache and re-derive balances from `entries` alone — identical (journal is the source of truth).
-5. [ ] `ExportTransactions` over a window returns valid `canonical.Record`s (round-trips through JSON).
-6. [ ] `make lint` clean.
+## Verification (Sprint 1 DoD) — ✅ PASSED 2026-05-31
+1. [x] `make sqlc` + `make proto` regenerate cleanly (no diff); `make build` green (4 binaries).
+2. [x] `go test ./... -race` green, including the `rapid` conservation property (AC-2) and the append-only trigger test (testcontainers).
+3. [x] Live `ledger` binary (vs ephemeral PG16): post a balanced transfer over gRPC; `GetBalance` matches the hand-computed figure (SETTLEMENT liability −5000, FEES revenue +5000). Note: `make seed` is still a Sprint-0 stub, so the seeded SETTLEMENT/FEES accounts were used.
+4. [x] Dropped the `account_balances` cache; `GetBalance` re-derives correct figures from `entries` alone (derives via `SumEntriesByAccount`, never reads the cache; also covered by the derived==cached test).
+5. [x] `ExportTransactions` over a window returns valid `canonical.Record`s (round-trips through JSON).
+6. [x] `make lint` clean (0 issues, whole repo).
 
 ---
 
@@ -132,42 +132,44 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 **Decisions:** public REST via `chi` on `:8080`; switch gRPC `:50052`; `mockrail` on `:50053`; transfer domain in `internal/switch`; ledger reached via gRPC client; idempotency durable in Postgres with a Redis (`REDIS_ADDR`) fast-path (ADR-0003); externalized transfer state lives in `transactions.status`.
 
 ## NS-201 · REST `POST /v1/transfers` (FR-T1)
-- [ ] `internal/switch/transport/rest.go` — `chi` router; `POST /v1/transfers` decoding `{source, destination, amount_minor, currency, reference}` + a required `Idempotency-Key` header; request validation (positive amount, known currency).
-- [ ] `GET /v1/transfers/{id}` — return the current transfer state.
-- [ ] `api/openapi/switch.yaml` — document both endpoints + error shapes.
-- [ ] Wire the router into `cmd/switchd` alongside `/healthz` (via `serviceboot`).
+- [x] `internal/switch/transport/rest.go` — `chi` router; `POST /v1/transfers` decoding `{source, destination, amount_minor, currency, reference}` + a required `Idempotency-Key` header; request validation (positive amount, known currency). (Domain types in `internal/switch/transfer.go` — `package transfer`; behind a `Service` interface, NS-201 wires `StubService`.)
+- [x] `GET /v1/transfers/{id}` — return the current transfer state.
+- [x] `api/openapi/switch.yaml` — document both endpoints + error shapes.
+- [x] Wire the router into `cmd/switchd` alongside `/healthz` (via `serviceboot`). (Added `Options.RegisterHTTP` hook → `health.NewServer` register callback; REST mounted at `/`, `/healthz`+`/metrics` still take precedence.)
 
 ## NS-202 · Durable idempotency store (FR-T2, ADR-0003)
-- [ ] `internal/switch/idempotency.go` — reserve the key (`status=in_progress`, store `request_fingerprint`) in `idempotency_keys`; on completion store `response` + `transaction_id` + `status`.
-- [ ] Redis fast-path: check/set the key in Redis; a miss falls through to Postgres (the durable record of truth).
-- [ ] Replay of a completed key returns the **stored** result; same key + different fingerprint → `409 Conflict`.
-- [ ] Tests: first call processes; replay returns the stored result; concurrent `in_progress` handled.
+- [x] `internal/switch/idempotency.go` — reserve the key (`status=in_progress`, store `request_fingerprint`) in `idempotency_keys`; on completion store `response` + `transaction_id` + `status`. (`IdempotencyStore.Reserve` → `Outcome` {Reserved/Replay/Conflict/InProgress} via `INSERT … ON CONFLICT DO NOTHING`; `Complete`; `Fingerprint(req)` = SHA-256 of canonical body. 2nd sqlc block → `internal/switch/postgres/switchdb`.)
+- [ ] Redis fast-path: check/set the key in Redis; a miss falls through to Postgres (the durable record of truth). **(Deferred — Postgres-only this sprint; ADR-0003 fast-path is a later optimization.)**
+- [x] Replay of a completed key returns the **stored** result; same key + different fingerprint → `409 Conflict`. (Store returns `OutcomeReplay`/`OutcomeConflict`; transport maps `ErrIdempotencyConflict`/`ErrInProgress` → 409. End-to-end HTTP wiring lands with the real orchestrator in NS-205.)
+- [x] Tests: first call processes; replay returns the stored result; concurrent `in_progress` handled. (testcontainers: Reserved→InProgress→Replay→Conflict; plus a pure `Fingerprint` stability test. JSONB compared semantically, not byte-wise.)
 
 ## NS-203 · Transfer state machine — happy path (FR-T3)
-- [ ] `internal/switch/statemachine.go` — encode the ARCHITECTURE §4 transitions; `INITIATED → DEBIT_PENDING → DEBITED → AWAITING_SETTLEMENT → SETTLED`.
-- [ ] `internal/switch/orchestrator.go` — drive a transfer through the machine, persisting each state in `transactions.status` (single externalized source of state).
-- [ ] Unit tests: legal transitions advance; illegal transitions error.
+- [x] `internal/switch/statemachine.go` — encode the ARCHITECTURE §4 transitions; `INITIATED → DEBIT_PENDING → DEBITED → AWAITING_SETTLEMENT → SETTLED`. (`transitions` table + `State.CanTransition`; `statusForState` maps the 5 rich states → 3 coarse `transactions.status` values via `pkg/canonical`; `stateForStatus` inverts for the read model.)
+- [x] `internal/switch/orchestrator.go` — drive a transfer through the machine, persisting each state in `transactions.status` (single externalized source of state). (`Orchestrator` implements `Service`; synchronous happy path; `Ledger`/`Rail`/`Store` interfaces (real wiring NS-204/205). Switch owns one `transactions` row per transfer carrying `idempotency_key`+lifecycle status; source/dest/amount stashed in `metadata` JSONB for GET. `PostgresStore` over new `switch/postgres/queries/transactions.sql`.)
+- [x] Unit tests: legal transitions advance; illegal transitions error. (White-box `CanTransition`/`statusForState`/`stateForStatus`; testcontainers orchestrator happy-path (debit/settle/rail each called once, GET reconstructs fields) + debit-failure-aborts.)
+- Note: `cmd/switchd` still wires `StubService`; the swap to `Orchestrator` (with real ledger/rail + idempotency) lands in NS-205. Data-model (switch row + ledger postings linked by `reference`) to be confirmed there.
 
 ## NS-204 · `mockrail` v1 — success path (ARCHITECTURE §2.3)
-- [ ] `internal/mockrail/server.go` — `SendToRail` returns success after a configurable latency (`MOCKRAIL_LATENCY_MS`); serve on `:50053` in `cmd/mockrail`.
-- [ ] `internal/switch/railclient.go` — switch → mockrail client.
+- [x] `internal/mockrail/server.go` — `SendToRail` returns success after a configurable latency (`MOCKRAIL_LATENCY_MS`); serve on `:50053` in `cmd/mockrail`. (New `api/proto/mockrail/v1` `RailService.SendToRail`; server honours ctx cancellation during latency; `cmd/mockrail` registers it + parses `MOCKRAIL_LATENCY_MS`.)
+- [x] `internal/switch/railclient.go` — switch → mockrail client. (`RailClient` implements the orchestrator's `Rail` interface; non-success verdict → error.)
+- [x] Tests: bufconn smoke (success / latency respected / ctx-cancel) + switch `RailClient` against the real server over bufconn.
 
 ## NS-205 · switch → ledger debit/credit (FR-T3)
-- [ ] `internal/switch/ledgerclient.go` — gRPC client to ledger `:50051`.
-- [ ] On `DEBITED`: post debit(source) → credit(`SETTLEMENT`); on `SETTLED`: post debit(`SETTLEMENT`) → credit(destination). Each call carries the transfer `reference`.
-- [ ] Test: after a happy-path settle, ledger balances reflect the move exactly once.
+- [x] `internal/switch/ledgerclient.go` — gRPC client to ledger `:50051` behind the `Ledger` interface. (Idempotency moved to an `IdempotentService` decorator (`idempotent.go`) that reserves the key *before* the orchestrator creates any row — so a duplicate never writes a second `transactions` row. `cmd/switchd` now wires the real Postgres pool + ledger/rail gRPC clients + decorator; `StubService` deleted, replaced by a transport-local test double.)
+- [x] On `DEBITED`: post debit(source) → credit(`SETTLEMENT`); on `SETTLED`: post debit(`SETTLEMENT`) → credit(destination). Each call carries the transfer `reference` and posts as a separate balanced ledger transaction (two rows linked by reference, per the data-model decision).
+- [x] Test: after a happy-path settle, ledger balances reflect the move exactly once. (`TestLedgerClient_BothLegsMoveMoneyOnce` over a real bufconn ledger; `TestSettle_EndToEnd` exercises the full stack over one Postgres and asserts replay is a no-op (one `transactions` row), altered body → conflict, and SETTLEMENT nets to zero.)
 
 ## NS-206 · correlation-id + tracing (NFR-7)
-- [ ] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`.
-- [ ] OTel spans link switch → rail → ledger into one trace.
-- [ ] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`).
+- [x] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`. (chi `correlationID` middleware reads/generates `X-Correlation-ID`, puts it on the request ctx, echoes it on the response; `logging.Unary{Client,Server}Interceptor` carry it across gRPC as `x-correlation-id` metadata — client injects, server lifts back onto the handler ctx. Round-trip test proves both ends agree on the key.)
+- [x] OTel spans link switch → rail → ledger into one trace. (`otelhttp` wraps switch's REST router for the root server span; `otelgrpc` stats handlers on switchd's client conns + serviceboot's gRPC server emit child spans that continue the trace via the already-configured W3C propagator.)
+- [x] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`). (Verified: one trace, root `switchd.rest` → two `ledger…/PostTransaction` (debit + settlement legs) + one `mockrail…/SendToRail`, each with the downstream server span as its child.)
 
 ## Verification (Sprint 2 DoD)
-1. [ ] Run `ledger`, `mockrail`, `switchd`; `curl POST /v1/transfers` settles; `GET /v1/transfers/{id}` shows `SETTLED`.
-2. [ ] Repeat with the same `Idempotency-Key` → identical response, no second transaction (DB shows one).
-3. [ ] Same key + altered body → `409`.
-4. [ ] Jaeger shows one trace spanning switch → rail → ledger.
-5. [ ] `go test ./... -race` + `make lint` green.
+1. [x] Run `ledger`, `mockrail`, `switchd`; `curl POST /v1/transfers` settles; `GET /v1/transfers/{id}` shows `SETTLED`. (POST → `201` `SETTLED`; GET → `200` `SETTLED`. Demo accounts `CUST-001`/`CUST-002` seeded via `make seed`.)
+2. [x] Repeat with the same `Idempotency-Key` → identical response, no second transaction (DB shows one). (Replay returned the same id; `SELECT count(*) … WHERE idempotency_key='dod-key-1'` = 1.)
+3. [x] Same key + altered body → `409`. (`409 Conflict`, `transfer: idempotency-key reused with a different request`.)
+4. [x] Jaeger shows one trace spanning switch → rail → ledger. (trace `e31ec221…`, 7 spans, root `switchd.rest`.)
+5. [x] `go test ./... -race` + `make lint` green. (all packages ok; lint 0 issues.)
 
 ---
 
@@ -181,46 +183,46 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 **Decisions:** transactional outbox in `internal/switch/outbox` (writer in the same txn as the state change; poller scans `idx_outbox_unpublished`, at-least-once → idempotent handlers, ADR-0004); reversals are parent-linked compensating ledger transactions; rail callbacks arrive on switch gRPC `:50052`; chaos is mockrail-side and deterministic by seed.
 
 ## NS-301 · Transactional outbox — writer + poller (FR-R3, ADR-0004)
-- [ ] `internal/switch/outbox/writer.go` — append an `outbox` row in the same DB txn as the state change (no dual-write).
-- [ ] `internal/switch/outbox/poller.go` — poll unpublished rows (`published_at IS NULL`), dispatch to a handler, mark `published_at`; bounded batch + interval.
-- [ ] Handlers are idempotent (at-least-once delivery).
-- [ ] `outbox_lag` gauge wired via `pkg/metrics`.
+- [x] `internal/switch/outbox/writer.go` — append an `outbox` row in the same DB txn as the state change (no dual-write). (`outbox.Append(ctx, q, …)` takes a tx-scoped `*switchdb.Queries`; `PostgresStore.WithTx` runs `{state change + Append}` atomically.)
+- [x] `internal/switch/outbox/poller.go` — poll unpublished rows, dispatch to a handler, mark `published_at`; bounded batch + interval. (Claim via `FOR UPDATE SKIP LOCKED` + lease; per-event exponential backoff → dead-letter at the attempt cap so a poison event never head-of-line blocks. `Drain` flushes synchronously for tests/recovery.)
+- [x] Handlers are idempotent (at-least-once delivery). (`Handler` contract documents at-least-once; delivery guarantees + dead-letter hook verified by testcontainers tests.)
+- [x] `outbox_lag` gauge wired via `pkg/metrics`. (Surfaced as `switch_outbox_lag_seconds` in NS-308: `cmd/switchd` ticks `OutboxLagSeconds` every 5s onto the gauge, and the dead-letter hook feeds `switch_outbox_dead_letters_total`.)
 
 ## NS-302 · Reversal as compensating transaction (FR-R1, FR-R2)
-- [ ] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal).
-- [ ] Idempotent: re-running a reversal for an already-reversed parent is a no-op (guard on parent + status).
-- [ ] Tests: source restored exactly; double-reversal is a no-op.
+- [x] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal). (`LedgerClient.PostReversal` posts SETTLEMENT→source as `type='reversal'`, parent-linked; ledger proto/service gained `parent_transaction_id` + `idempotency_key` in NS-301b. Driver `handleReversal` drives `reversal_pending → reversed`.)
+- [x] Idempotent: re-running a reversal for an already-reversed parent is a no-op (guard on parent + status). (Three guards: the `reversal_pending` status check, the per-leg `<id>:reversal` idempotency key, and the `uq_reversal_per_parent` unique index. Ledger splits `23505` already-reversed no-op from `40001` retry.)
+- [x] Tests: source restored exactly; double-reversal is a no-op. (`TestReversal_RestoresSourceExactlyOnce`: rail-declined transfer → source restored to 0, destination untouched, SETTLEMENT nets to zero, one parent-linked reversal, re-post is a no-op.)
 
-## NS-303 · In-doubt handling (FR-T4)
-- [ ] On rail timeout/unknown, route `AWAITING_SETTLEMENT → REVERSAL_PENDING` and enqueue a reversal via the outbox (in-doubt → reverse; never assume success/failure).
-- [ ] `REVERSAL_PENDING → REVERSED` once the compensating entries post.
+## NS-303 · In-doubt handling (FR-T4, DESIGN-NOTES §1)
+- [x] On rail timeout/unknown, route to `IN_DOUBT` and issue a **TSQ** before deciding (never assume success/failure): TSQ-settled → settle, TSQ-no-settlement → `REVERSAL_PENDING`, TSQ inconclusive after bounded retries → `MANUAL_REVIEW`. (mockrail gains a `QueryStatus` RPC + `RAIL_STATUS_DECLINED`; `RailClient.QueryStatus`; driver `handleInDoubt` with `WithTSQPolicy`. IN_DOUBT is its own persisted status + outbox event, so a crash re-issues the TSQ — never a re-send.)
+- [x] `REVERSAL_PENDING → REVERSED` once the compensating entries post (via NS-302). (Integration tests: TSQ-settled completes settlement with **source not refunded, destination credited**; TSQ-no-settlement reverses; inconclusive holds in MANUAL_REVIEW with money in suspense.)
 
 ## NS-304 · Idempotent duplicate rail callbacks (FR-T5)
-- [ ] `internal/switch/grpc.go` — switch gRPC rail-callback intake; a second "success" for an already-terminal transfer is a no-op (terminal-state guard).
-- [ ] Test: a duplicate callback changes nothing.
+- [x] `internal/switch/grpc.go` — switch gRPC `RailCallback` intake on `:50052` (registered via `serviceboot.RegisterGRPC`); a second "success" for an already-terminal transfer is a no-op. Two guards close the duplicate/poller race: the row-locked transition methods no-op once terminal, and the `<id>:settle` per-leg key means even concurrent settlements post one leg. (Looks up the lifecycle row by reference via `metadata ? 'source'`.)
+- [x] Test: a duplicate callback changes nothing. (`TestRailCallback_DuplicateIsNoOp` over real gRPC/bufconn: SUCCESS settles, the duplicate leaves one settlement leg + balances unchanged; unknown reference → NotFound.)
 
 ## NS-305 · `mockrail` chaos (ARCHITECTURE §2.3)
-- [ ] Env-seeded probabilities: added latency, hard timeout (no response), duplicate-success callback, explicit decline.
-- [ ] Deterministic by `MOCKRAIL_SEED` so a run is reproducible.
+- [x] Env-seeded probabilities: added latency, hard timeout (no response), duplicate-success callback, explicit decline (+ a TSQ-timeout knob). (`MOCKRAIL_P_TIMEOUT/P_DECLINE/P_DUPLICATE/P_TSQ_TIMEOUT`; duplicate callbacks dial the switch via opt-in `SWITCH_CALLBACK_TARGET`. The TSQ reports the *true* outcome and can disagree with a timed-out send — the "settled-but-we-timed-out" case.)
+- [x] Deterministic by `MOCKRAIL_SEED` so a run is reproducible. (Each outcome derives from `hash(seed, reference, dimension)` — no shared RNG, so it is reproducible per transfer regardless of concurrency/order; verified by a same-seed/different-seed test.)
 
 ## NS-306 · Crash recovery (NFR-4)
-- [ ] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox.
-- [ ] Scripted verification that no work is lost.
+- [x] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox. (`internal/switch/recovery.go` — `Recoverer.Recover` re-enqueues every resumable transfer with no live outbox event (`ListStuckTransfers`), mapping status→driving event; idempotent handlers make a duplicate event a no-op. `cmd/switchd` runs the sweep at boot before the poller. Idempotency lease takeover (`idempotency.go`): a replay past the in-progress lease re-attaches to the transfer the crashed holder created (`GetTransferIDByIdempotencyKey`) rather than starting a second one — DESIGN-NOTES §5.)
+- [x] Scripted verification that no work is lost. (`scripts/crash_recovery_demo.sh` runs the real ledger/mockrail/switchd binaries, fires a transfer, `kill -9`s switchd while the row is `debited` (settlement held behind `MOCKRAIL_LATENCY_MS`), restarts it, and asserts the transfer resumes to `SETTLED` with exactly one debit leg — no stranded or doubled debit. Verified: crash at `debited` → `SETTLED`.)
 
 ## NS-307 · Chaos test — zero stranded debits (AC-1)
-- [ ] `test/chaos` — drive N transfers with mockrail injecting timeouts/duplicates + a mid-flow kill; assert every debit ends matched by a credit or a completed reversal (zero stranded).
+- [x] `test/chaos` — drive N transfers with mockrail injecting timeouts/duplicates + a mid-flow kill; assert every debit ends matched by a credit or a completed reversal (zero stranded). (`test/chaos/chaos_test.go`, no build tag, skips without Docker. In-process real stack: ledger gRPC + mockrail (seeded chaos: timeout/decline/duplicate-callback/TSQ-timeout) over bufconn + Postgres orchestrator/driver/outbox. Mid-flow kill = deleting in-flight outbox events while all 60 transfers sit at `debited`; the recovery sweep + poller then drive each to its true seed-determined terminal. Asserts: zero non-terminal left; each transfer's terminal state == the rail's seed-derived outcome (a no-side-effect predictor `mockrail.Server` with the same config); and ledger balances reconcile exactly — settled→credited, reversed→source restored, manual_review→held in SETTLEMENT suspense. Reproducible by seed: split is identical across runs (settled=40/reversed=14/manual_review=6).)
 
 ## NS-308 · Metrics (NFR-7)
-- [ ] Transfer outcome counters by terminal state (`settled` / `reversed` / `failed`).
-- [ ] Reversal-latency histogram.
-- [ ] Outbox-lag gauge (from NS-301) surfaced on `/metrics`.
+- [x] Transfer outcome counters by terminal state (`settled` / `reversed` / `failed`). (`switch_transfer_outcomes_total{outcome}` in `internal/switch/metrics.go`; the driver increments on a terminal `mark*` only when it actually `advanced` (exactly-once under at-least-once delivery), covering `settled`/`reversed`/`manual_review`/`failed`. Series pre-initialised to 0.)
+- [x] Reversal-latency histogram. (`switch_reversal_latency_seconds`; observed in `handleReversal` as `time.Since(InitiatedAt)` when the reversal advances. `transferDetail` gained `InitiatedAt`.)
+- [x] Outbox-lag gauge (from NS-301) surfaced on `/metrics`. (`switch_outbox_lag_seconds`, ticked from `OutboxLagSeconds` every 5s. `serviceboot.Options` gained a `Registry` field so `cmd/switchd` owns the registry, builds the instruments, and serves them. Verified live: 8 transfers → `settled=5,reversed=3`, reversal histogram count=3, lag=0.)
 
-## Verification (Sprint 3 DoD)
-1. [ ] `test/chaos` ends with zero stranded debits over N transfers (AC-1).
-2. [ ] Kill `switchd` mid-flow; after restart the debit is matched by a completed reversal — no stranded debit.
-3. [ ] A duplicate rail callback is a no-op (state unchanged).
-4. [ ] Prometheus shows the outcome split + reversal-latency histogram + outbox lag.
-5. [ ] `go test ./... -race` + `make lint` green.
+## Verification (Sprint 3 DoD) — ✅ PASSED 2026-05-31
+1. [x] `test/chaos` ends with zero stranded debits over N transfers (AC-1). (60 transfers under seeded chaos + a mid-flow crash; every transfer reaches its seed-determined terminal state and balances reconcile exactly. Split settled=40/reversed=14/manual_review=6, reproducible across runs.)
+2. [x] Kill `switchd` mid-flow; after restart the debit is matched by a completed reversal — no stranded debit. (`scripts/crash_recovery_demo.sh`: real `kill -9` at `debited` → resumes to `SETTLED`, one debit leg. The crash-then-reverse path is covered by `test/chaos` (14 reversals all began stranded at `debited`).)
+3. [x] A duplicate rail callback is a no-op (state unchanged). (`TestRailCallback_DuplicateIsNoOp`, re-confirmed green.)
+4. [x] Prometheus shows the outcome split + reversal-latency histogram + outbox lag. (Live `:8080/metrics`: `switch_transfer_outcomes_total{settled=5,reversed=3}`, `switch_reversal_latency_seconds_count=3`, `switch_outbox_lag_seconds=0`.)
+5. [x] `go test ./... -race` + `make lint` green. (Whole repo: all packages ok; lint 0 issues.)
 
 ---
 

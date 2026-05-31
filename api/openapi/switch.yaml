@@ -1,0 +1,128 @@
+openapi: 3.0.3
+info:
+  title: Invariant Core — Switch API
+  version: 0.3.0
+  description: >
+    Public REST surface of the transfer engine (switchd). A transfer is created
+    with a required Idempotency-Key header; retries with the same key are
+    deduplicated. Processing is asynchronous: POST debits synchronously and
+    returns 202 Accepted at DEBITED, then settlement (or reversal) completes via
+    the transactional outbox — poll GET until a terminal state (SETTLED,
+    REVERSED, FAILED, or MANUAL_REVIEW). Amounts are integer minor units (kobo);
+    100 kobo = ₦1.
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+paths:
+  /v1/transfers:
+    post:
+      summary: Create a transfer
+      operationId: createTransfer
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Caller-supplied key that makes a retried transfer a no-op.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTransferRequest"
+      responses:
+        "202":
+          description: >
+            Transfer accepted and debited; settlement completes asynchronously.
+            For a new key the body's state is typically DEBITED; for an idempotent
+            replay of an already-seen key it is the transfer's current (live)
+            state and no new work is done. Either way, poll GET until terminal.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "400":
+          description: Validation error (missing header/field, non-positive amount, unknown currency, malformed JSON).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The same Idempotency-Key was reused with a different request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/transfers/{id}:
+    get:
+      summary: Get a transfer's current state
+      operationId: getTransfer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Current transfer view.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transfer"
+        "404":
+          description: No transfer exists for the given id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    CreateTransferRequest:
+      type: object
+      required: [source, destination, amount_minor, currency, reference]
+      properties:
+        source:
+          type: string
+          description: Source account code.
+        destination:
+          type: string
+          description: Destination account code.
+        amount_minor:
+          type: integer
+          format: int64
+          description: Amount in minor units (kobo). Must be positive.
+        currency:
+          type: string
+          description: ISO 4217 code. NGN only in v1.
+          example: NGN
+        reference:
+          type: string
+          description: Cross-system reference (NIP session reference).
+    Transfer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        source:
+          type: string
+        destination:
+          type: string
+        amount_minor:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        state:
+          type: string
+          enum: [INITIATED, DEBIT_PENDING, DEBITED, AWAITING_SETTLEMENT, SETTLED, IN_DOUBT, REVERSAL_PENDING, REVERSED, MANUAL_REVIEW, FAILED]
+    Error:
+      type: object
+      properties:
+        error:
+          type: string

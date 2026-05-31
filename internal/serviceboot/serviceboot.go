@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/health"
@@ -32,8 +33,22 @@ type Options struct {
 	ServiceName string
 	// HealthAddr is the listen address for /healthz and /metrics (required).
 	HealthAddr string
-	// GRPCAddr, if non-empty, starts an empty *grpc.Server on that address.
+	// GRPCAddr, if non-empty, starts a *grpc.Server on that address.
 	GRPCAddr string
+	// RegisterGRPC, if set, is called with the gRPC server after it is created
+	// and before it serves, so callers can register their service surface. When
+	// nil the server starts with an empty surface (Sprint 0 behaviour).
+	RegisterGRPC func(*grpc.Server)
+	// RegisterHTTP, if set, is called with the health server's mux after
+	// /healthz and /metrics are mounted, so a service can attach extra routes
+	// (e.g. switchd's public REST API) on the same HealthAddr listener.
+	RegisterHTTP func(*http.ServeMux)
+	// Registry, if set, is the Prometheus registry served on /metrics. A caller
+	// passes its own so business instruments registered before boot (e.g. the
+	// switch's outcome counters) are exposed. When nil a fresh registry is made.
+	Registry *metrics.Registry
+	// Cleanup, if set, runs during graceful shutdown (e.g. closing a DB pool).
+	Cleanup func()
 }
 
 // Run boots the service and blocks until a termination signal, then shuts
@@ -50,8 +65,11 @@ func Run(opts Options) error {
 		logger.Warn("tracing init failed; continuing without traces", "error", err)
 	}
 
-	reg := metrics.New()
-	healthSrv := health.NewServer(opts.HealthAddr, reg.Handler())
+	reg := opts.Registry
+	if reg == nil {
+		reg = metrics.New()
+	}
+	healthSrv := health.NewServer(opts.HealthAddr, reg.Handler(), opts.RegisterHTTP)
 
 	serveErr := make(chan error, 2)
 	go func() {
@@ -66,7 +84,17 @@ func Run(opts Options) error {
 		if err != nil {
 			return err
 		}
-		grpcSrv = grpc.NewServer()
+		// otelgrpc continues the trace from the caller (switch -> rail/ledger
+		// becomes one trace); the correlation interceptor lifts the caller's
+		// correlation id from metadata onto the handler context so server logs
+		// carry it too.
+		grpcSrv = grpc.NewServer(
+			grpc.StatsHandler(otelgrpc.NewServerHandler()),
+			grpc.ChainUnaryInterceptor(logging.UnaryServerInterceptor()),
+		)
+		if opts.RegisterGRPC != nil {
+			opts.RegisterGRPC(grpcSrv)
+		}
 		go func() {
 			if err := grpcSrv.Serve(lis); err != nil {
 				serveErr <- err
@@ -87,10 +115,10 @@ func Run(opts Options) error {
 		logger.Error("server error; shutting down", "service", opts.ServiceName, "error", err)
 	}
 
-	return shutdown(healthSrv, grpcSrv, shutdownTracing)
+	return shutdown(healthSrv, grpcSrv, shutdownTracing, opts.Cleanup)
 }
 
-func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing tracing.ShutdownFunc) error {
+func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing tracing.ShutdownFunc, cleanup func()) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -100,6 +128,9 @@ func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing trac
 	}
 	if grpcSrv != nil {
 		grpcSrv.GracefulStop()
+	}
+	if cleanup != nil {
+		cleanup()
 	}
 	if shutdownTracing != nil {
 		if err := shutdownTracing(shutdownCtx); err != nil && firstErr == nil {
