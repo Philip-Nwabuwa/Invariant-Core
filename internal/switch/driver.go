@@ -22,6 +22,9 @@ type Ledger interface {
 	PostDebitLeg(ctx context.Context, t Transfer) (uuid.UUID, error)
 	// PostSettlementLeg debits settlement and credits the destination.
 	PostSettlementLeg(ctx context.Context, t Transfer) error
+	// PostReversal posts the compensating transaction (settlement -> source),
+	// linked to the debit leg, restoring the source. Idempotent by leg key.
+	PostReversal(ctx context.Context, t Transfer, parentLedgerTxID uuid.UUID) error
 }
 
 // RailVerdict is the rail's answer for a leg, as the driver sees it.
@@ -69,6 +72,8 @@ func (d *Driver) Handle(ctx context.Context, evt outbox.Event) error {
 		return d.handleDebitRequested(ctx, evt.AggregateID)
 	case outbox.EventDebited:
 		return d.handleDebited(ctx, evt.AggregateID)
+	case outbox.EventReversalRequested:
+		return d.handleReversal(ctx, evt.AggregateID)
 	default:
 		return fmt.Errorf("driver: no handler for event %q", evt.Type)
 	}
@@ -128,6 +133,30 @@ func (d *Driver) handleDebited(ctx context.Context, id uuid.UUID) error {
 		_, err := d.store.markInDoubt(ctx, id, det.eventPayload())
 		return err
 	}
+}
+
+// handleReversal posts the compensating reversal that restores the source and
+// advances reversal_pending -> reversed. It is idempotent: the status guard
+// no-ops if the transfer already reversed, and the ledger's per-leg key plus the
+// uq_reversal_per_parent index ensure at most one compensating transaction even
+// under a re-driven or concurrent delivery (a 23505 is an already-reversed
+// no-op; a 40001 is retried inside the ledger).
+func (d *Driver) handleReversal(ctx context.Context, id uuid.UUID) error {
+	det, err := d.store.load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if det.Status != statusReversalPending {
+		return nil // already advanced (e.g. already reversed)
+	}
+	if det.DebitLegTxID == nil {
+		return fmt.Errorf("reversal for %s has no debit leg recorded", id)
+	}
+	if err := d.ledger.PostReversal(ctx, det.transfer(), *det.DebitLegTxID); err != nil {
+		return fmt.Errorf("post reversal: %w", err)
+	}
+	_, err = d.store.markReversed(ctx, id)
+	return err
 }
 
 // transferEventPayload is the JSON body of a transfer outbox event. The handler

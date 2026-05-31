@@ -234,6 +234,16 @@ func (s *PostgresStore) markReversalPending(ctx context.Context, id uuid.UUID, p
 	})
 }
 
+// markReversed advances reversal_pending -> reversed (terminal).
+func (s *PostgresStore) markReversed(ctx context.Context, id uuid.UUID) (bool, error) {
+	return s.advance(ctx, id, statusReversed, func(q *switchdb.Queries, _ transferDetail) error {
+		if err := q.SetTransferStatus(ctx, switchdb.SetTransferStatusParams{ID: id, Status: statusReversed}); err != nil {
+			return fmt.Errorf("set reversed: %w", err)
+		}
+		return nil
+	})
+}
+
 // markFailed advances pending -> failed (terminal; no money moved).
 func (s *PostgresStore) markFailed(ctx context.Context, id uuid.UUID) (bool, error) {
 	return s.advance(ctx, id, statusFailed, func(q *switchdb.Queries, _ transferDetail) error {

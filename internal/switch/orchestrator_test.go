@@ -16,18 +16,28 @@ import (
 // fakeLedger / fakeRail record calls and can be told to fail, so the orchestrator
 // and driver can be exercised without real gRPC clients.
 type fakeLedger struct {
-	debitErr, settleErr     error
-	debitCalls, settleCalls int
+	debitErr, settleErr, reversalErr error
+	debitCalls, settleCalls          int
+	reversalCalls                    int
+	lastDebitLeg                     uuid.UUID
+	lastReversalParent               uuid.UUID
 }
 
 func (f *fakeLedger) PostDebitLeg(context.Context, transfer.Transfer) (uuid.UUID, error) {
 	f.debitCalls++
-	return uuid.New(), f.debitErr
+	f.lastDebitLeg = uuid.New()
+	return f.lastDebitLeg, f.debitErr
 }
 
 func (f *fakeLedger) PostSettlementLeg(context.Context, transfer.Transfer) error {
 	f.settleCalls++
 	return f.settleErr
+}
+
+func (f *fakeLedger) PostReversal(_ context.Context, _ transfer.Transfer, parent uuid.UUID) error {
+	f.reversalCalls++
+	f.lastReversalParent = parent
+	return f.reversalErr
 }
 
 type fakeRail struct {

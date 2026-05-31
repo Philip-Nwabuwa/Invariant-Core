@@ -45,6 +45,16 @@ func (l *LedgerClient) PostSettlementLeg(ctx context.Context, t Transfer) error 
 	return err
 }
 
+// PostReversal posts the compensating transaction that restores the source:
+// it debits settlement and credits the source, linked to the debit leg via
+// parent_transaction_id (append-only — the journal is never edited). The
+// <id>:reversal key plus the uq_reversal_per_parent index make a re-driven
+// reversal an idempotent no-op in the ledger.
+func (l *LedgerClient) PostReversal(ctx context.Context, t Transfer, parentLedgerTxID uuid.UUID) error {
+	_, err := l.post(ctx, t, settlementAccount, t.Source, legKey(t.ID, "reversal"), canonical.TypeReversal, &parentLedgerTxID)
+	return err
+}
+
 // legKey is the deterministic per-leg idempotency key.
 func legKey(transferID uuid.UUID, leg string) string {
 	return fmt.Sprintf("%s:%s", transferID, leg)

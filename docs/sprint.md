@@ -189,9 +189,9 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [ ] `outbox_lag` gauge wired via `pkg/metrics`. (Query `OutboxLagSeconds` + dead-letter hook in place; Prometheus wiring lands in NS-308.)
 
 ## NS-302 · Reversal as compensating transaction (FR-R1, FR-R2)
-- [ ] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal).
-- [ ] Idempotent: re-running a reversal for an already-reversed parent is a no-op (guard on parent + status).
-- [ ] Tests: source restored exactly; double-reversal is a no-op.
+- [x] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal). (`LedgerClient.PostReversal` posts SETTLEMENT→source as `type='reversal'`, parent-linked; ledger proto/service gained `parent_transaction_id` + `idempotency_key` in NS-301b. Driver `handleReversal` drives `reversal_pending → reversed`.)
+- [x] Idempotent: re-running a reversal for an already-reversed parent is a no-op (guard on parent + status). (Three guards: the `reversal_pending` status check, the per-leg `<id>:reversal` idempotency key, and the `uq_reversal_per_parent` unique index. Ledger splits `23505` already-reversed no-op from `40001` retry.)
+- [x] Tests: source restored exactly; double-reversal is a no-op. (`TestReversal_RestoresSourceExactlyOnce`: rail-declined transfer → source restored to 0, destination untouched, SETTLEMENT nets to zero, one parent-linked reversal, re-post is a no-op.)
 
 ## NS-303 · In-doubt handling (FR-T4)
 - [ ] On rail timeout/unknown, route `AWAITING_SETTLEMENT → REVERSAL_PENDING` and enqueue a reversal via the outbox (in-doubt → reverse; never assume success/failure).
