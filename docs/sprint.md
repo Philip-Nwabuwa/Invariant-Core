@@ -207,7 +207,7 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 
 ## NS-306 · Crash recovery (NFR-4)
 - [x] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox. (`internal/switch/recovery.go` — `Recoverer.Recover` re-enqueues every resumable transfer with no live outbox event (`ListStuckTransfers`), mapping status→driving event; idempotent handlers make a duplicate event a no-op. `cmd/switchd` runs the sweep at boot before the poller. Idempotency lease takeover (`idempotency.go`): a replay past the in-progress lease re-attaches to the transfer the crashed holder created (`GetTransferIDByIdempotencyKey`) rather than starting a second one — DESIGN-NOTES §5.)
-- [ ] Scripted verification that no work is lost.
+- [x] Scripted verification that no work is lost. (`scripts/crash_recovery_demo.sh` runs the real ledger/mockrail/switchd binaries, fires a transfer, `kill -9`s switchd while the row is `debited` (settlement held behind `MOCKRAIL_LATENCY_MS`), restarts it, and asserts the transfer resumes to `SETTLED` with exactly one debit leg — no stranded or doubled debit. Verified: crash at `debited` → `SETTLED`.)
 
 ## NS-307 · Chaos test — zero stranded debits (AC-1)
 - [ ] `test/chaos` — drive N transfers with mockrail injecting timeouts/duplicates + a mid-flow kill; assert every debit ends matched by a credit or a completed reversal (zero stranded).
