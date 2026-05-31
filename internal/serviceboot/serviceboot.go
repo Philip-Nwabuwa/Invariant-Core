@@ -43,6 +43,10 @@ type Options struct {
 	// /healthz and /metrics are mounted, so a service can attach extra routes
 	// (e.g. switchd's public REST API) on the same HealthAddr listener.
 	RegisterHTTP func(*http.ServeMux)
+	// Registry, if set, is the Prometheus registry served on /metrics. A caller
+	// passes its own so business instruments registered before boot (e.g. the
+	// switch's outcome counters) are exposed. When nil a fresh registry is made.
+	Registry *metrics.Registry
 	// Cleanup, if set, runs during graceful shutdown (e.g. closing a DB pool).
 	Cleanup func()
 }
@@ -61,7 +65,10 @@ func Run(opts Options) error {
 		logger.Warn("tracing init failed; continuing without traces", "error", err)
 	}
 
-	reg := metrics.New()
+	reg := opts.Registry
+	if reg == nil {
+		reg = metrics.New()
+	}
 	healthSrv := health.NewServer(opts.HealthAddr, reg.Handler(), opts.RegisterHTTP)
 
 	serveErr := make(chan error, 2)

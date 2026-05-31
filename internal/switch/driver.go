@@ -61,10 +61,17 @@ type Driver struct {
 	rail        Rail
 	tsqAttempts int           // TSQ tries before holding for manual review
 	tsqBackoff  time.Duration // wait between TSQ tries
+	metrics     *Metrics      // optional; nil-safe
 }
 
 // DriverOption customizes a Driver.
 type DriverOption func(*Driver)
+
+// WithMetrics wires the switch's Prometheus instruments so the driver records
+// the terminal-outcome split and reversal latency (NS-308).
+func WithMetrics(m *Metrics) DriverOption {
+	return func(d *Driver) { d.metrics = m }
+}
 
 // WithTSQPolicy sets how persistently the in-doubt handler queries the rail
 // before giving up and routing to MANUAL_REVIEW.
@@ -86,6 +93,16 @@ func NewDriver(store *PostgresStore, ledger Ledger, rail Rail, opts ...DriverOpt
 
 // Driver implements outbox.Handler — verified at compile time.
 var _ outbox.Handler = (*Driver)(nil)
+
+// onTerminal records the outcome metric exactly once per transfer: only when the
+// mark actually advanced the row (advanced==true) and succeeded. Under
+// at-least-once delivery a duplicate event no-ops the mark (advanced==false), so
+// the counter is not double-incremented.
+func (d *Driver) onTerminal(advanced bool, err error, outcome string) {
+	if err == nil && advanced {
+		d.metrics.recordOutcome(outcome)
+	}
+}
 
 // Handle dispatches an outbox event to the matching step. Handlers are
 // idempotent: a duplicate delivery re-checks the persisted status and no-ops.
@@ -119,7 +136,8 @@ func (d *Driver) handleDebitRequested(ctx context.Context, id uuid.UUID) error {
 	ledgerTxID, err := d.ledger.PostDebitLeg(ctx, det.transfer())
 	if err != nil {
 		if isTerminalLedgerError(err) {
-			_, ferr := d.store.markFailed(ctx, id)
+			adv, ferr := d.store.markFailed(ctx, id)
+			d.onTerminal(adv, ferr, statusFailed)
 			return ferr
 		}
 		return fmt.Errorf("post debit leg: %w", err)
@@ -149,7 +167,8 @@ func (d *Driver) handleDebited(ctx context.Context, id uuid.UUID) error {
 		if err := d.ledger.PostSettlementLeg(ctx, det.transfer()); err != nil {
 			return fmt.Errorf("post settlement leg: %w", err)
 		}
-		_, err := d.store.markSettled(ctx, id)
+		adv, err := d.store.markSettled(ctx, id)
+		d.onTerminal(adv, err, statusSettled)
 		return err
 	case VerdictDeclined:
 		_, err := d.store.markReversalPending(ctx, id, det.eventPayload())
@@ -180,13 +199,15 @@ func (d *Driver) handleInDoubt(ctx context.Context, id uuid.UUID) error {
 		if err := d.ledger.PostSettlementLeg(ctx, det.transfer()); err != nil {
 			return fmt.Errorf("post settlement leg: %w", err)
 		}
-		_, err := d.store.markSettled(ctx, id)
+		adv, err := d.store.markSettled(ctx, id)
+		d.onTerminal(adv, err, statusSettled)
 		return err
 	case VerdictDeclined:
 		_, err := d.store.markReversalPending(ctx, id, det.eventPayload())
 		return err
 	default: // VerdictUnknown: the rail could not tell us — hold, do not guess.
-		_, err := d.store.markManualReview(ctx, id)
+		adv, err := d.store.markManualReview(ctx, id)
+		d.onTerminal(adv, err, statusManualReview)
 		return err
 	}
 }
@@ -231,7 +252,11 @@ func (d *Driver) handleReversal(ctx context.Context, id uuid.UUID) error {
 	if err := d.ledger.PostReversal(ctx, det.transfer(), *det.DebitLegTxID); err != nil {
 		return fmt.Errorf("post reversal: %w", err)
 	}
-	_, err = d.store.markReversed(ctx, id)
+	adv, err := d.store.markReversed(ctx, id)
+	d.onTerminal(adv, err, statusReversed)
+	if err == nil && adv {
+		d.metrics.observeReversalLatency(time.Since(det.InitiatedAt))
+	}
 	return err
 }
 
@@ -254,9 +279,11 @@ func (d *Driver) HandleRailCallback(ctx context.Context, reference string, verdi
 				return "", fmt.Errorf("post settlement leg: %w", err)
 			}
 		}
-		if _, err := d.store.markSettled(ctx, det.ID); err != nil {
+		adv, err := d.store.markSettled(ctx, det.ID)
+		if err != nil {
 			return "", err
 		}
+		d.onTerminal(adv, err, statusSettled)
 	case VerdictDeclined:
 		if _, err := d.store.markReversalPending(ctx, det.ID, det.eventPayload()); err != nil {
 			return "", err

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +37,7 @@ type transferDetail struct {
 	Destination  string
 	Amount       money.Amount
 	DebitLegTxID *uuid.UUID
+	InitiatedAt  time.Time
 }
 
 // transfer rebuilds the in-flight Transfer the ledger and rail clients consume.
@@ -170,6 +172,7 @@ func detailFromRow(tx switchdb.Transaction) transferDetail {
 		Destination:  meta.Destination,
 		Amount:       money.FromMinor(meta.AmountMinor),
 		DebitLegTxID: meta.DebitLegTxID,
+		InitiatedAt:  tx.InitiatedAt,
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/switch/outbox"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/switch/transport"
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/logging"
+	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/metrics"
 )
 
 const defaultDBURL = "postgres://invariantcore:invariantcore@localhost:5432/invariantcore?sslmode=disable"
@@ -60,8 +61,13 @@ func main() {
 	ledgerClient := transfer.NewLedgerClient(ledgerv1.NewLedgerServiceClient(ledgerConn))
 	railClient := transfer.NewRailClient(mockrailv1.NewRailServiceClient(railConn))
 
+	// Prometheus instruments (NS-308): created here and passed both to the driver
+	// (outcome split + reversal latency) and to serviceboot (served on /metrics).
+	reg := metrics.New()
+	switchMetrics := transfer.NewMetrics(reg)
+
 	store := transfer.NewPostgresStore(pool)
-	driver := transfer.NewDriver(store, ledgerClient, railClient)
+	driver := transfer.NewDriver(store, ledgerClient, railClient, transfer.WithMetrics(switchMetrics))
 	orchestrator := transfer.NewOrchestrator(store, driver)
 	svc := transfer.NewIdempotentService(orchestrator, transfer.NewIdempotencyStore(pool))
 	handler := transport.NewHandler(svc)
@@ -78,8 +84,27 @@ func main() {
 	}
 
 	pollCtx, stopPoller := context.WithCancel(context.Background())
-	poller := outbox.NewPoller(store.Queries(), driver, outbox.Config{})
+	poller := outbox.NewPoller(store.Queries(), driver, outbox.Config{},
+		outbox.WithDeadLetterHook(func(outbox.Event) { switchMetrics.IncDeadLetter() }))
 	go poller.Run(pollCtx)
+
+	// Publish the outbox backlog age as a gauge on a fixed cadence (NS-308). The
+	// ticker stops when the poller context is cancelled at shutdown.
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		q := store.Queries()
+		for {
+			select {
+			case <-pollCtx.Done():
+				return
+			case <-t.C:
+				if lag, err := q.OutboxLagSeconds(pollCtx); err == nil {
+					switchMetrics.SetOutboxLag(lag)
+				}
+			}
+		}
+	}()
 
 	grpcServer := transfer.NewGRPCServer(driver)
 
@@ -87,6 +112,7 @@ func main() {
 		ServiceName: "switchd",
 		HealthAddr:  serviceboot.EnvOr("SWITCHD_HTTP_ADDR", ":8080"),
 		GRPCAddr:    serviceboot.EnvOr("SWITCHD_GRPC_ADDR", ":50052"),
+		Registry:    reg,
 		// The internal gRPC surface receives rail callbacks (idempotent intake).
 		RegisterGRPC: func(srv *grpc.Server) {
 			switchv1.RegisterSwitchServiceServer(srv, grpcServer)

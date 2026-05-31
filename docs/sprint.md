@@ -186,7 +186,7 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] `internal/switch/outbox/writer.go` — append an `outbox` row in the same DB txn as the state change (no dual-write). (`outbox.Append(ctx, q, …)` takes a tx-scoped `*switchdb.Queries`; `PostgresStore.WithTx` runs `{state change + Append}` atomically.)
 - [x] `internal/switch/outbox/poller.go` — poll unpublished rows, dispatch to a handler, mark `published_at`; bounded batch + interval. (Claim via `FOR UPDATE SKIP LOCKED` + lease; per-event exponential backoff → dead-letter at the attempt cap so a poison event never head-of-line blocks. `Drain` flushes synchronously for tests/recovery.)
 - [x] Handlers are idempotent (at-least-once delivery). (`Handler` contract documents at-least-once; delivery guarantees + dead-letter hook verified by testcontainers tests.)
-- [ ] `outbox_lag` gauge wired via `pkg/metrics`. (Query `OutboxLagSeconds` + dead-letter hook in place; Prometheus wiring lands in NS-308.)
+- [x] `outbox_lag` gauge wired via `pkg/metrics`. (Surfaced as `switch_outbox_lag_seconds` in NS-308: `cmd/switchd` ticks `OutboxLagSeconds` every 5s onto the gauge, and the dead-letter hook feeds `switch_outbox_dead_letters_total`.)
 
 ## NS-302 · Reversal as compensating transaction (FR-R1, FR-R2)
 - [x] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal). (`LedgerClient.PostReversal` posts SETTLEMENT→source as `type='reversal'`, parent-linked; ledger proto/service gained `parent_transaction_id` + `idempotency_key` in NS-301b. Driver `handleReversal` drives `reversal_pending → reversed`.)
@@ -213,9 +213,9 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] `test/chaos` — drive N transfers with mockrail injecting timeouts/duplicates + a mid-flow kill; assert every debit ends matched by a credit or a completed reversal (zero stranded). (`test/chaos/chaos_test.go`, no build tag, skips without Docker. In-process real stack: ledger gRPC + mockrail (seeded chaos: timeout/decline/duplicate-callback/TSQ-timeout) over bufconn + Postgres orchestrator/driver/outbox. Mid-flow kill = deleting in-flight outbox events while all 60 transfers sit at `debited`; the recovery sweep + poller then drive each to its true seed-determined terminal. Asserts: zero non-terminal left; each transfer's terminal state == the rail's seed-derived outcome (a no-side-effect predictor `mockrail.Server` with the same config); and ledger balances reconcile exactly — settled→credited, reversed→source restored, manual_review→held in SETTLEMENT suspense. Reproducible by seed: split is identical across runs (settled=40/reversed=14/manual_review=6).)
 
 ## NS-308 · Metrics (NFR-7)
-- [ ] Transfer outcome counters by terminal state (`settled` / `reversed` / `failed`).
-- [ ] Reversal-latency histogram.
-- [ ] Outbox-lag gauge (from NS-301) surfaced on `/metrics`.
+- [x] Transfer outcome counters by terminal state (`settled` / `reversed` / `failed`). (`switch_transfer_outcomes_total{outcome}` in `internal/switch/metrics.go`; the driver increments on a terminal `mark*` only when it actually `advanced` (exactly-once under at-least-once delivery), covering `settled`/`reversed`/`manual_review`/`failed`. Series pre-initialised to 0.)
+- [x] Reversal-latency histogram. (`switch_reversal_latency_seconds`; observed in `handleReversal` as `time.Since(InitiatedAt)` when the reversal advances. `transferDetail` gained `InitiatedAt`.)
+- [x] Outbox-lag gauge (from NS-301) surfaced on `/metrics`. (`switch_outbox_lag_seconds`, ticked from `OutboxLagSeconds` every 5s. `serviceboot.Options` gained a `Registry` field so `cmd/switchd` owns the registry, builds the instruments, and serves them. Verified live: 8 transfers → `settled=5,reversed=3`, reversal histogram count=3, lag=0.)
 
 ## Verification (Sprint 3 DoD)
 1. [ ] `test/chaos` ends with zero stranded debits over N transfers (AC-1).
