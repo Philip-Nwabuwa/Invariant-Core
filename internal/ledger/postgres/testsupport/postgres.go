@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -62,15 +63,18 @@ func NewPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 
-	if _, err := pool.Exec(ctx, migrationSQL(t)); err != nil {
-		t.Fatalf("apply migration: %v", err)
+	for _, m := range migrationSQL(t) {
+		if _, err := pool.Exec(ctx, m); err != nil {
+			t.Fatalf("apply migration: %v", err)
+		}
 	}
 
 	return pool
 }
 
-// migrationSQL reads migrations/0001_init.up.sql located relative to this file.
-func migrationSQL(t *testing.T) string {
+// migrationSQL reads every migrations/*.up.sql in lexical (version) order so the
+// fixture matches the live schema — Sprint 3 adds 0002, future sprints add more.
+func migrationSQL(t *testing.T) []string {
 	t.Helper()
 	_, thisFile, _, ok := runtime.Caller(0)
 	if !ok {
@@ -78,12 +82,23 @@ func migrationSQL(t *testing.T) string {
 	}
 	// testsupport -> postgres -> ledger -> internal -> repo root
 	root := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "..")
-	path := filepath.Join(root, "migrations", "0001_init.up.sql")
-	b, err := os.ReadFile(path)
+	paths, err := filepath.Glob(filepath.Join(root, "migrations", "*.up.sql"))
 	if err != nil {
-		t.Fatalf("read migration %s: %v", path, err)
+		t.Fatalf("glob migrations: %v", err)
 	}
-	return string(b)
+	if len(paths) == 0 {
+		t.Fatal("no up migrations found")
+	}
+	sort.Strings(paths)
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", p, err)
+		}
+		out = append(out, string(b))
+	}
+	return out
 }
 
 func dockerUnavailable(err error) bool {

@@ -26,7 +26,8 @@ type transferMeta struct {
 // PostgresStore persists a transfer's lifecycle row (the single externalized
 // source of state). It is the concrete Store used by the orchestrator.
 type PostgresStore struct {
-	q *switchdb.Queries
+	pool *pgxpool.Pool
+	q    *switchdb.Queries
 }
 
 // PostgresStore implements Store — verified at compile time.
@@ -34,7 +35,30 @@ var _ Store = (*PostgresStore)(nil)
 
 // NewPostgresStore builds a store over the given pool.
 func NewPostgresStore(pool *pgxpool.Pool) *PostgresStore {
-	return &PostgresStore{q: switchdb.New(pool)}
+	return &PostgresStore{pool: pool, q: switchdb.New(pool)}
+}
+
+// Queries exposes the pool-scoped queries for non-transactional reads.
+func (s *PostgresStore) Queries() *switchdb.Queries { return s.q }
+
+// WithTx runs fn inside a single DB transaction, passing it a tx-scoped Queries.
+// It is how a state change and the outbox event that must follow it commit
+// together (no dual-write). Returning an error rolls back; otherwise it commits.
+func (s *PostgresStore) WithTx(ctx context.Context, fn func(q *switchdb.Queries) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	if err := fn(s.q.WithTx(tx)); err != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			return errors.Join(err, fmt.Errorf("rollback: %w", rbErr))
+		}
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
 }
 
 // Create inserts a new transfer row at status 'pending' and returns its id.

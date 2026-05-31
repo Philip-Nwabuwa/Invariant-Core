@@ -183,10 +183,10 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 **Decisions:** transactional outbox in `internal/switch/outbox` (writer in the same txn as the state change; poller scans `idx_outbox_unpublished`, at-least-once → idempotent handlers, ADR-0004); reversals are parent-linked compensating ledger transactions; rail callbacks arrive on switch gRPC `:50052`; chaos is mockrail-side and deterministic by seed.
 
 ## NS-301 · Transactional outbox — writer + poller (FR-R3, ADR-0004)
-- [ ] `internal/switch/outbox/writer.go` — append an `outbox` row in the same DB txn as the state change (no dual-write).
-- [ ] `internal/switch/outbox/poller.go` — poll unpublished rows (`published_at IS NULL`), dispatch to a handler, mark `published_at`; bounded batch + interval.
-- [ ] Handlers are idempotent (at-least-once delivery).
-- [ ] `outbox_lag` gauge wired via `pkg/metrics`.
+- [x] `internal/switch/outbox/writer.go` — append an `outbox` row in the same DB txn as the state change (no dual-write). (`outbox.Append(ctx, q, …)` takes a tx-scoped `*switchdb.Queries`; `PostgresStore.WithTx` runs `{state change + Append}` atomically.)
+- [x] `internal/switch/outbox/poller.go` — poll unpublished rows, dispatch to a handler, mark `published_at`; bounded batch + interval. (Claim via `FOR UPDATE SKIP LOCKED` + lease; per-event exponential backoff → dead-letter at the attempt cap so a poison event never head-of-line blocks. `Drain` flushes synchronously for tests/recovery.)
+- [x] Handlers are idempotent (at-least-once delivery). (`Handler` contract documents at-least-once; delivery guarantees + dead-letter hook verified by testcontainers tests.)
+- [ ] `outbox_lag` gauge wired via `pkg/metrics`. (Query `OutboxLagSeconds` + dead-letter hook in place; Prometheus wiring lands in NS-308.)
 
 ## NS-302 · Reversal as compensating transaction (FR-R1, FR-R2)
 - [ ] Reversal = a new ledger transaction with `parent_transaction_id` set, posting the inverse entries that restore the source (append-only; never edits the journal).
