@@ -150,8 +150,9 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 - Note: `cmd/switchd` still wires `StubService`; the swap to `Orchestrator` (with real ledger/rail + idempotency) lands in NS-205. Data-model (switch row + ledger postings linked by `reference`) to be confirmed there.
 
 ## NS-204 · `mockrail` v1 — success path (ARCHITECTURE §2.3)
-- [ ] `internal/mockrail/server.go` — `SendToRail` returns success after a configurable latency (`MOCKRAIL_LATENCY_MS`); serve on `:50053` in `cmd/mockrail`.
-- [ ] `internal/switch/railclient.go` — switch → mockrail client.
+- [x] `internal/mockrail/server.go` — `SendToRail` returns success after a configurable latency (`MOCKRAIL_LATENCY_MS`); serve on `:50053` in `cmd/mockrail`. (New `api/proto/mockrail/v1` `RailService.SendToRail`; server honours ctx cancellation during latency; `cmd/mockrail` registers it + parses `MOCKRAIL_LATENCY_MS`.)
+- [x] `internal/switch/railclient.go` — switch → mockrail client. (`RailClient` implements the orchestrator's `Rail` interface; non-success verdict → error.)
+- [x] Tests: bufconn smoke (success / latency respected / ctx-cancel) + switch `RailClient` against the real server over bufconn.
 
 ## NS-205 · switch → ledger debit/credit (FR-T3)
 - [ ] `internal/switch/ledgerclient.go` — gRPC client to ledger `:50051`.
