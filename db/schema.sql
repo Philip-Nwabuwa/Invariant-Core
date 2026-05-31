@@ -27,7 +27,8 @@ CREATE TABLE transactions (
     reference             TEXT NOT NULL,              -- cross-system NIP/session reference
     type                  TEXT NOT NULL CHECK (type IN ('transfer','reversal','fee')),
     status                TEXT NOT NULL CHECK (status IN
-                              ('pending','debited','settled','failed','timed_out','reversed')),
+                              ('pending','debited','settled','failed','timed_out','reversed',
+                               'in_doubt','reversal_pending','manual_review')),
     idempotency_key       TEXT UNIQUE,                -- set by the switch on customer-initiated transfers
     parent_transaction_id UUID REFERENCES transactions(id),  -- non-null for reversals
     currency              CHAR(3) NOT NULL DEFAULT 'NGN',
@@ -39,6 +40,12 @@ CREATE TABLE transactions (
 CREATE INDEX idx_transactions_reference ON transactions (reference);
 CREATE INDEX idx_transactions_status    ON transactions (status);
 CREATE INDEX idx_transactions_parent    ON transactions (parent_transaction_id);
+
+-- At most one reversal per parent transaction: a re-driven reversal is a
+-- DB-enforced no-op so double-reversal can never post (idempotent compensation).
+CREATE UNIQUE INDEX uq_reversal_per_parent
+    ON transactions (parent_transaction_id)
+    WHERE type = 'reversal';
 
 -- ---------------------------------------------------------------------------
 -- Entries: the append-only journal lines. Each transaction has >= 2 entries
@@ -73,18 +80,27 @@ CREATE TRIGGER trg_entries_no_update BEFORE UPDATE OR DELETE ON entries
 -- The application also checks this before posting; the trigger is the backstop
 -- so an unbalanced transaction can never be committed by any path.
 -- ---------------------------------------------------------------------------
+-- Currency-aware (DESIGN-NOTES #3): a transaction must balance within EVERY
+-- currency group, not merely in summed minor units. The application still
+-- rejects mixed-currency sets; this is the DB backstop.
 CREATE OR REPLACE FUNCTION assert_transaction_balanced() RETURNS trigger AS $$
 DECLARE
-    diff BIGINT;
+    unbalanced_groups BIGINT;
 BEGIN
-    SELECT COALESCE(SUM(CASE WHEN direction = 'debit'  THEN amount_minor ELSE 0 END), 0)
-         - COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_minor ELSE 0 END), 0)
-      INTO diff
-      FROM entries
-     WHERE transaction_id = NEW.transaction_id;
+    SELECT COUNT(*)
+      INTO unbalanced_groups
+      FROM (
+        SELECT currency,
+               COALESCE(SUM(CASE WHEN direction = 'debit'  THEN amount_minor ELSE 0 END), 0)
+             - COALESCE(SUM(CASE WHEN direction = 'credit' THEN amount_minor ELSE 0 END), 0) AS diff
+          FROM entries
+         WHERE transaction_id = NEW.transaction_id
+         GROUP BY currency
+      ) g
+     WHERE g.diff <> 0;
 
-    IF diff <> 0 THEN
-        RAISE EXCEPTION 'transaction % is unbalanced by % minor units', NEW.transaction_id, diff;
+    IF unbalanced_groups > 0 THEN
+        RAISE EXCEPTION 'transaction % is unbalanced within a currency group', NEW.transaction_id;
     END IF;
     RETURN NULL;
 END;
@@ -136,11 +152,19 @@ CREATE TABLE outbox (
     event_type      TEXT NOT NULL,                    -- e.g. 'transfer.debited', 'reversal.requested'
     payload         JSONB NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    published_at    TIMESTAMPTZ
+    published_at    TIMESTAMPTZ,
+    -- Delivery bookkeeping: bounded retries with exponential backoff and a
+    -- dead-letter flag, so a poison event steps aside instead of head-of-line
+    -- blocking newer events.
+    attempts        INT         NOT NULL DEFAULT 0,
+    next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_error      TEXT,
+    dead_letter     BOOLEAN     NOT NULL DEFAULT false
 );
 
--- Partial index: the poller only scans unpublished rows.
-CREATE INDEX idx_outbox_unpublished ON outbox (created_at) WHERE published_at IS NULL;
+-- Partial index: the poller claims rows that are unpublished, not dead-lettered, and due.
+CREATE INDEX idx_outbox_unpublished ON outbox (next_attempt_at)
+    WHERE published_at IS NULL AND dead_letter = false;
 
 -- ---------------------------------------------------------------------------
 -- Reconciliation runs + exceptions. Every run is recorded for auditability;

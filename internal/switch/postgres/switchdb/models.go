@@ -54,6 +54,10 @@ type Outbox struct {
 	Payload       []byte     `json:"payload"`
 	CreatedAt     time.Time  `json:"created_at"`
 	PublishedAt   *time.Time `json:"published_at"`
+	Attempts      int32      `json:"attempts"`
+	NextAttemptAt time.Time  `json:"next_attempt_at"`
+	LastError     *string    `json:"last_error"`
+	DeadLetter    bool       `json:"dead_letter"`
 }
 
 type ReconException struct {
