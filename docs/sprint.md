@@ -246,8 +246,8 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 - [x] Adapter unit tests (messy formats map cleanly; nothing downstream sees a raw row). (`adapters_test.go`: JSONL round-trip, NIBSS whitespace/status mapping, bad header + malformed amount rejected, generic-CSV reorder/extra-column/empty-status tolerance, `parseStatus` table. Sentinel errors `ErrMalformedRow`/`ErrMissingColumn`/`ErrUnknownStatus`.)
 
 ## NS-403 · Streaming matcher (FR-C2, FR-C7)
-- [ ] `internal/reconcile/matcher.go` — working index keyed by `reference`; match on exact `amount_minor` + `initiated_at` within the configurable window.
-- [ ] Stream inputs (don't hold whole files in memory); the index is keyed, not the full file.
+- [x] `internal/reconcile/matcher.go` — working index keyed by `reference`; match on exact `amount_minor` + `initiated_at` within the configurable window. (`Match(internal, external Stream, window)`: reference hit + exact amount/currency + `withinWindow` → matched; amount/currency/window disagreement → `amount_mismatch`; repeated external reference → `duplicate`; reference miss → `unmatched_external`; leftover internal → classified per NS-404.)
+- [x] Stream inputs (don't hold whole files in memory); the index is keyed, not the full file. (Only the internal side is indexed in memory; the external side is consumed through the `Stream` interface one record at a time — the adapters satisfy it structurally.)
 
 ## NS-404 · Exception categories (FR-C3)
 - [x] `internal/reconcile/exceptions.go` — `unmatched_internal`, `unmatched_external`, `amount_mismatch`, `pending_reversal`, `duplicate`. (`Category` enum mirrors the `recon_exceptions` CHECK exactly; `Exception` carries the internal/external `canonical.Record` + `DeltaMinor` for amount mismatches.)
