@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/health"
@@ -76,7 +77,14 @@ func Run(opts Options) error {
 		if err != nil {
 			return err
 		}
-		grpcSrv = grpc.NewServer()
+		// otelgrpc continues the trace from the caller (switch -> rail/ledger
+		// becomes one trace); the correlation interceptor lifts the caller's
+		// correlation id from metadata onto the handler context so server logs
+		// carry it too.
+		grpcSrv = grpc.NewServer(
+			grpc.StatsHandler(otelgrpc.NewServerHandler()),
+			grpc.ChainUnaryInterceptor(logging.UnaryServerInterceptor()),
+		)
 		if opts.RegisterGRPC != nil {
 			opts.RegisterGRPC(grpcSrv)
 		}

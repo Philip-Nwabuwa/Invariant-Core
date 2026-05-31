@@ -160,9 +160,9 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 - [x] Test: after a happy-path settle, ledger balances reflect the move exactly once. (`TestLedgerClient_BothLegsMoveMoneyOnce` over a real bufconn ledger; `TestSettle_EndToEnd` exercises the full stack over one Postgres and asserts replay is a no-op (one `transactions` row), altered body → conflict, and SETTLEMENT nets to zero.)
 
 ## NS-206 · correlation-id + tracing (NFR-7)
-- [ ] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`.
-- [ ] OTel spans link switch → rail → ledger into one trace.
-- [ ] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`).
+- [x] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`. (chi `correlationID` middleware reads/generates `X-Correlation-ID`, puts it on the request ctx, echoes it on the response; `logging.Unary{Client,Server}Interceptor` carry it across gRPC as `x-correlation-id` metadata — client injects, server lifts back onto the handler ctx. Round-trip test proves both ends agree on the key.)
+- [x] OTel spans link switch → rail → ledger into one trace. (`otelhttp` wraps switch's REST router for the root server span; `otelgrpc` stats handlers on switchd's client conns + serviceboot's gRPC server emit child spans that continue the trace via the already-configured W3C propagator.)
+- [ ] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`). — pending DoD walkthrough (needs `make dev` + the 3 services + customer accounts seeded; see note below).
 
 ## Verification (Sprint 2 DoD)
 1. [ ] Run `ledger`, `mockrail`, `switchd`; `curl POST /v1/transfers` settles; `GET /v1/transfers/{id}` shows `SETTLED`.

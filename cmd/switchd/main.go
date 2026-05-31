@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/serviceboot"
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/switch/transport"
+	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/logging"
 )
 
 const defaultDBURL = "postgres://invariantcore:invariantcore@localhost:5432/invariantcore?sslmode=disable"
@@ -34,18 +37,20 @@ func main() {
 	}
 
 	// gRPC clients to the ledger and the rail. NewClient is lazy: it dials on the
-	// first RPC, so a slow dependency at boot doesn't crash the switch.
-	ledgerConn, err := grpc.NewClient(
-		serviceboot.EnvOr("LEDGER_GRPC_TARGET", "localhost:50051"),
+	// first RPC, so a slow dependency at boot doesn't crash the switch. The
+	// otelgrpc stats handler emits a child span per call (so the transfer is one
+	// trace), and the correlation interceptor carries the request's correlation
+	// id across the wire as metadata.
+	clientOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(logging.UnaryClientInterceptor()),
+	}
+	ledgerConn, err := grpc.NewClient(serviceboot.EnvOr("LEDGER_GRPC_TARGET", "localhost:50051"), clientOpts...)
 	if err != nil {
 		log.Fatalf("switchd: ledger client: %v", err)
 	}
-	railConn, err := grpc.NewClient(
-		serviceboot.EnvOr("MOCKRAIL_GRPC_TARGET", "localhost:50053"),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	railConn, err := grpc.NewClient(serviceboot.EnvOr("MOCKRAIL_GRPC_TARGET", "localhost:50053"), clientOpts...)
 	if err != nil {
 		log.Fatalf("switchd: rail client: %v", err)
 	}
@@ -62,9 +67,11 @@ func main() {
 		HealthAddr:  serviceboot.EnvOr("SWITCHD_HTTP_ADDR", ":8080"),
 		GRPCAddr:    serviceboot.EnvOr("SWITCHD_GRPC_ADDR", ":50052"),
 		// Mount the REST router at "/"; the more specific /healthz and /metrics
-		// patterns registered by serviceboot still take precedence.
+		// patterns registered by serviceboot still take precedence. otelhttp
+		// starts the root server span for each transfer request, which the
+		// orchestrator's gRPC calls then continue into one trace.
 		RegisterHTTP: func(mux *http.ServeMux) {
-			mux.Handle("/", handler.Routes())
+			mux.Handle("/", otelhttp.NewHandler(handler.Routes(), "switchd.rest"))
 		},
 		Cleanup: func() {
 			_ = ledgerConn.Close()

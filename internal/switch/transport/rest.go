@@ -9,8 +9,10 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
+	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/logging"
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/money"
 )
 
@@ -31,9 +33,26 @@ func NewHandler(svc transfer.Service) *Handler {
 // service's HTTP listener in cmd/switchd.
 func (h *Handler) Routes() chi.Router {
 	r := chi.NewRouter()
+	r.Use(correlationID)
 	r.Post("/v1/transfers", h.create)
 	r.Get("/v1/transfers/{id}", h.get)
 	return r
+}
+
+// correlationID is chi middleware that establishes a correlation id for the
+// request: it reuses an incoming X-Correlation-ID header or generates one, puts
+// it on the request context (so logs and downstream gRPC calls carry it), and
+// echoes it on the response so the caller can correlate too.
+func correlationID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get(logging.CorrelationHeader)
+		if id == "" {
+			id = uuid.NewString()
+		}
+		w.Header().Set(logging.CorrelationHeader, id)
+		ctx := logging.ContextWithCorrelationID(r.Context(), id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // createTransferRequest is the JSON body of POST /v1/transfers. amount_minor
