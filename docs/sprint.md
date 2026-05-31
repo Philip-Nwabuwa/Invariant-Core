@@ -162,14 +162,14 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 ## NS-206 · correlation-id + tracing (NFR-7)
 - [x] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`. (chi `correlationID` middleware reads/generates `X-Correlation-ID`, puts it on the request ctx, echoes it on the response; `logging.Unary{Client,Server}Interceptor` carry it across gRPC as `x-correlation-id` metadata — client injects, server lifts back onto the handler ctx. Round-trip test proves both ends agree on the key.)
 - [x] OTel spans link switch → rail → ledger into one trace. (`otelhttp` wraps switch's REST router for the root server span; `otelgrpc` stats handlers on switchd's client conns + serviceboot's gRPC server emit child spans that continue the trace via the already-configured W3C propagator.)
-- [ ] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`). — pending DoD walkthrough (needs `make dev` + the 3 services + customer accounts seeded; see note below).
+- [x] Manual: a transfer shows as a single end-to-end trace in Jaeger (`:16686`). (Verified: one trace, root `switchd.rest` → two `ledger…/PostTransaction` (debit + settlement legs) + one `mockrail…/SendToRail`, each with the downstream server span as its child.)
 
 ## Verification (Sprint 2 DoD)
-1. [ ] Run `ledger`, `mockrail`, `switchd`; `curl POST /v1/transfers` settles; `GET /v1/transfers/{id}` shows `SETTLED`.
-2. [ ] Repeat with the same `Idempotency-Key` → identical response, no second transaction (DB shows one).
-3. [ ] Same key + altered body → `409`.
-4. [ ] Jaeger shows one trace spanning switch → rail → ledger.
-5. [ ] `go test ./... -race` + `make lint` green.
+1. [x] Run `ledger`, `mockrail`, `switchd`; `curl POST /v1/transfers` settles; `GET /v1/transfers/{id}` shows `SETTLED`. (POST → `201` `SETTLED`; GET → `200` `SETTLED`. Demo accounts `CUST-001`/`CUST-002` seeded via `make seed`.)
+2. [x] Repeat with the same `Idempotency-Key` → identical response, no second transaction (DB shows one). (Replay returned the same id; `SELECT count(*) … WHERE idempotency_key='dod-key-1'` = 1.)
+3. [x] Same key + altered body → `409`. (`409 Conflict`, `transfer: idempotency-key reused with a different request`.)
+4. [x] Jaeger shows one trace spanning switch → rail → ledger. (trace `e31ec221…`, 7 spans, root `switchd.rest`.)
+5. [x] `go test ./... -race` + `make lint` green. (all packages ok; lint 0 issues.)
 
 ---
 
