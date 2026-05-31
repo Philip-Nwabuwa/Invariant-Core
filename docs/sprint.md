@@ -112,13 +112,13 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] `ExportTransactions` streams `canonical.Record`s for a time window (status/type/amounts mapped from the journal).
 - [x] Mapping unit test (proto ⇄ `canonical.Record`) + a gRPC smoke test.
 
-## Verification (Sprint 1 DoD)
-1. [ ] `make sqlc` + `make proto` regenerate cleanly; `make build` green.
-2. [ ] `go test ./... -race` green, including the `rapid` conservation property (AC-2).
-3. [ ] `make seed`, then post a balanced transfer over gRPC; `GetBalance` matches the hand-computed figure.
-4. [ ] Drop the `account_balances` cache and re-derive balances from `entries` alone — identical (journal is the source of truth).
-5. [ ] `ExportTransactions` over a window returns valid `canonical.Record`s (round-trips through JSON).
-6. [ ] `make lint` clean.
+## Verification (Sprint 1 DoD) — ✅ PASSED 2026-05-31
+1. [x] `make sqlc` + `make proto` regenerate cleanly (no diff); `make build` green (4 binaries).
+2. [x] `go test ./... -race` green, including the `rapid` conservation property (AC-2) and the append-only trigger test (testcontainers).
+3. [x] Live `ledger` binary (vs ephemeral PG16): post a balanced transfer over gRPC; `GetBalance` matches the hand-computed figure (SETTLEMENT liability −5000, FEES revenue +5000). Note: `make seed` is still a Sprint-0 stub, so the seeded SETTLEMENT/FEES accounts were used.
+4. [x] Dropped the `account_balances` cache; `GetBalance` re-derives correct figures from `entries` alone (derives via `SumEntriesByAccount`, never reads the cache; also covered by the derived==cached test).
+5. [x] `ExportTransactions` over a window returns valid `canonical.Record`s (round-trips through JSON).
+6. [x] `make lint` clean (0 issues, whole repo).
 
 ---
 
