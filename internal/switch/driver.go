@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -45,20 +46,42 @@ const (
 // is a definitive "we don't know" that routes to the in-doubt path.
 type Rail interface {
 	Send(ctx context.Context, t Transfer) (RailVerdict, error)
+	// QueryStatus is a TSQ: it asks the rail whether the reference settled, so an
+	// in-doubt transfer is resolved with a fact rather than a guess. A
+	// VerdictUnknown (or error) means the rail could not say.
+	QueryStatus(ctx context.Context, reference string) (RailVerdict, error)
 }
 
 // Driver advances a transfer through the state machine in response to outbox
 // events. It is the single place post-debit progression happens, so a crash
 // simply re-delivers the event and the driver resumes from the persisted status.
 type Driver struct {
-	store  *PostgresStore
-	ledger Ledger
-	rail   Rail
+	store       *PostgresStore
+	ledger      Ledger
+	rail        Rail
+	tsqAttempts int           // TSQ tries before holding for manual review
+	tsqBackoff  time.Duration // wait between TSQ tries
+}
+
+// DriverOption customizes a Driver.
+type DriverOption func(*Driver)
+
+// WithTSQPolicy sets how persistently the in-doubt handler queries the rail
+// before giving up and routing to MANUAL_REVIEW.
+func WithTSQPolicy(attempts int, backoff time.Duration) DriverOption {
+	return func(d *Driver) {
+		d.tsqAttempts = attempts
+		d.tsqBackoff = backoff
+	}
 }
 
 // NewDriver builds a Driver over its dependencies.
-func NewDriver(store *PostgresStore, ledger Ledger, rail Rail) *Driver {
-	return &Driver{store: store, ledger: ledger, rail: rail}
+func NewDriver(store *PostgresStore, ledger Ledger, rail Rail, opts ...DriverOption) *Driver {
+	d := &Driver{store: store, ledger: ledger, rail: rail, tsqAttempts: 3, tsqBackoff: 500 * time.Millisecond}
+	for _, o := range opts {
+		o(d)
+	}
+	return d
 }
 
 // Driver implements outbox.Handler — verified at compile time.
@@ -72,6 +95,8 @@ func (d *Driver) Handle(ctx context.Context, evt outbox.Event) error {
 		return d.handleDebitRequested(ctx, evt.AggregateID)
 	case outbox.EventDebited:
 		return d.handleDebited(ctx, evt.AggregateID)
+	case outbox.EventInDoubt:
+		return d.handleInDoubt(ctx, evt.AggregateID)
 	case outbox.EventReversalRequested:
 		return d.handleReversal(ctx, evt.AggregateID)
 	default:
@@ -133,6 +158,57 @@ func (d *Driver) handleDebited(ctx context.Context, id uuid.UUID) error {
 		_, err := d.store.markInDoubt(ctx, id, det.eventPayload())
 		return err
 	}
+}
+
+// handleInDoubt resolves an in-doubt transfer with a TSQ before deciding —
+// never reverse a transfer the rail actually settled (DESIGN-NOTES §1). A
+// confirmed settlement completes the settlement leg; a confirmed no-settlement
+// (decline) routes to reversal; an answer the rail cannot give after bounded
+// retries holds the transfer for MANUAL_REVIEW rather than guessing.
+func (d *Driver) handleInDoubt(ctx context.Context, id uuid.UUID) error {
+	det, err := d.store.load(ctx, id)
+	if err != nil {
+		return err
+	}
+	if det.Status != statusInDoubt {
+		return nil // already advanced
+	}
+
+	verdict := d.queryStatusWithRetry(ctx, det.Reference)
+	switch verdict {
+	case VerdictSuccess:
+		if err := d.ledger.PostSettlementLeg(ctx, det.transfer()); err != nil {
+			return fmt.Errorf("post settlement leg: %w", err)
+		}
+		_, err := d.store.markSettled(ctx, id)
+		return err
+	case VerdictDeclined:
+		_, err := d.store.markReversalPending(ctx, id, det.eventPayload())
+		return err
+	default: // VerdictUnknown: the rail could not tell us — hold, do not guess.
+		_, err := d.store.markManualReview(ctx, id)
+		return err
+	}
+}
+
+// queryStatusWithRetry issues the TSQ up to tsqAttempts times, returning the
+// first definitive verdict (success/declined). It returns VerdictUnknown only if
+// every attempt was inconclusive.
+func (d *Driver) queryStatusWithRetry(ctx context.Context, reference string) RailVerdict {
+	for attempt := 0; attempt < d.tsqAttempts; attempt++ {
+		if attempt > 0 && d.tsqBackoff > 0 {
+			select {
+			case <-ctx.Done():
+				return VerdictUnknown
+			case <-time.After(d.tsqBackoff):
+			}
+		}
+		verdict, err := d.rail.QueryStatus(ctx, reference)
+		if err == nil && verdict != VerdictUnknown {
+			return verdict
+		}
+	}
+	return VerdictUnknown
 }
 
 // handleReversal posts the compensating reversal that restores the source and

@@ -244,6 +244,17 @@ func (s *PostgresStore) markReversed(ctx context.Context, id uuid.UUID) (bool, e
 	})
 }
 
+// markManualReview advances in_doubt -> manual_review (held terminal: an
+// operator resolves it because the rail's outcome could not be determined).
+func (s *PostgresStore) markManualReview(ctx context.Context, id uuid.UUID) (bool, error) {
+	return s.advance(ctx, id, statusManualReview, func(q *switchdb.Queries, _ transferDetail) error {
+		if err := q.SetTransferStatus(ctx, switchdb.SetTransferStatusParams{ID: id, Status: statusManualReview}); err != nil {
+			return fmt.Errorf("set manual_review: %w", err)
+		}
+		return nil
+	})
+}
+
 // markFailed advances pending -> failed (terminal; no money moved).
 func (s *PostgresStore) markFailed(ctx context.Context, id uuid.UUID) (bool, error) {
 	return s.advance(ctx, id, statusFailed, func(q *switchdb.Queries, _ transferDetail) error {

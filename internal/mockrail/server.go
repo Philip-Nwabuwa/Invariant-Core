@@ -43,3 +43,18 @@ func (s *Server) SendToRail(ctx context.Context, req *mockrailv1.SendToRailReque
 		RailReference: uuid.NewString(),
 	}, nil
 }
+
+// QueryStatus answers a TSQ: it reports whether the referenced transfer settled.
+// The v1 default is SUCCESS after the configured latency; seedable disagreement
+// (and a TSQ that itself times out) is layered on by the chaos build (NS-305).
+func (s *Server) QueryStatus(ctx context.Context, req *mockrailv1.QueryStatusRequest) (*mockrailv1.QueryStatusResponse, error) {
+	if s.latency > 0 {
+		select {
+		case <-time.After(s.latency):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	_ = req
+	return &mockrailv1.QueryStatusResponse{Status: mockrailv1.RailStatus_RAIL_STATUS_SUCCESS}, nil
+}

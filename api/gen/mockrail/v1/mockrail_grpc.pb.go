@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RailService_SendToRail_FullMethodName = "/mockrail.v1.RailService/SendToRail"
+	RailService_SendToRail_FullMethodName  = "/mockrail.v1.RailService/SendToRail"
+	RailService_QueryStatus_FullMethodName = "/mockrail.v1.RailService/QueryStatus"
 )
 
 // RailServiceClient is the client API for RailService service.
@@ -32,6 +33,10 @@ const (
 type RailServiceClient interface {
 	// SendToRail submits a transfer to the rail and reports the outcome.
 	SendToRail(ctx context.Context, in *SendToRailRequest, opts ...grpc.CallOption) (*SendToRailResponse, error)
+	// QueryStatus is a Transaction Status Query (TSQ): given a transfer's
+	// reference, the rail reports whether it settled. The switch issues it to
+	// resolve an in-doubt transfer before deciding to reverse (DESIGN-NOTES §1).
+	QueryStatus(ctx context.Context, in *QueryStatusRequest, opts ...grpc.CallOption) (*QueryStatusResponse, error)
 }
 
 type railServiceClient struct {
@@ -52,6 +57,16 @@ func (c *railServiceClient) SendToRail(ctx context.Context, in *SendToRailReques
 	return out, nil
 }
 
+func (c *railServiceClient) QueryStatus(ctx context.Context, in *QueryStatusRequest, opts ...grpc.CallOption) (*QueryStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QueryStatusResponse)
+	err := c.cc.Invoke(ctx, RailService_QueryStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RailServiceServer is the server API for RailService service.
 // All implementations must embed UnimplementedRailServiceServer
 // for forward compatibility.
@@ -62,6 +77,10 @@ func (c *railServiceClient) SendToRail(ctx context.Context, in *SendToRailReques
 type RailServiceServer interface {
 	// SendToRail submits a transfer to the rail and reports the outcome.
 	SendToRail(context.Context, *SendToRailRequest) (*SendToRailResponse, error)
+	// QueryStatus is a Transaction Status Query (TSQ): given a transfer's
+	// reference, the rail reports whether it settled. The switch issues it to
+	// resolve an in-doubt transfer before deciding to reverse (DESIGN-NOTES §1).
+	QueryStatus(context.Context, *QueryStatusRequest) (*QueryStatusResponse, error)
 	mustEmbedUnimplementedRailServiceServer()
 }
 
@@ -74,6 +93,9 @@ type UnimplementedRailServiceServer struct{}
 
 func (UnimplementedRailServiceServer) SendToRail(context.Context, *SendToRailRequest) (*SendToRailResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SendToRail not implemented")
+}
+func (UnimplementedRailServiceServer) QueryStatus(context.Context, *QueryStatusRequest) (*QueryStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method QueryStatus not implemented")
 }
 func (UnimplementedRailServiceServer) mustEmbedUnimplementedRailServiceServer() {}
 func (UnimplementedRailServiceServer) testEmbeddedByValue()                     {}
@@ -114,6 +136,24 @@ func _RailService_SendToRail_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RailService_QueryStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueryStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RailServiceServer).QueryStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RailService_QueryStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RailServiceServer).QueryStatus(ctx, req.(*QueryStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RailService_ServiceDesc is the grpc.ServiceDesc for RailService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -124,6 +164,10 @@ var RailService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendToRail",
 			Handler:    _RailService_SendToRail_Handler,
+		},
+		{
+			MethodName: "QueryStatus",
+			Handler:    _RailService_QueryStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -41,14 +41,22 @@ func (f *fakeLedger) PostReversal(_ context.Context, _ transfer.Transfer, parent
 }
 
 type fakeRail struct {
-	verdict transfer.RailVerdict
-	sendErr error
-	calls   int
+	verdict    transfer.RailVerdict // SendToRail verdict
+	sendErr    error
+	calls      int
+	tsqVerdict transfer.RailVerdict // QueryStatus (TSQ) verdict
+	tsqErr     error
+	tsqCalls   int
 }
 
 func (f *fakeRail) Send(context.Context, transfer.Transfer) (transfer.RailVerdict, error) {
 	f.calls++
 	return f.verdict, f.sendErr
+}
+
+func (f *fakeRail) QueryStatus(context.Context, string) (transfer.RailVerdict, error) {
+	f.tsqCalls++
+	return f.tsqVerdict, f.tsqErr
 }
 
 // newStack wires the full async stack over a pool for tests.

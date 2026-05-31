@@ -193,9 +193,9 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] Idempotent: re-running a reversal for an already-reversed parent is a no-op (guard on parent + status). (Three guards: the `reversal_pending` status check, the per-leg `<id>:reversal` idempotency key, and the `uq_reversal_per_parent` unique index. Ledger splits `23505` already-reversed no-op from `40001` retry.)
 - [x] Tests: source restored exactly; double-reversal is a no-op. (`TestReversal_RestoresSourceExactlyOnce`: rail-declined transfer → source restored to 0, destination untouched, SETTLEMENT nets to zero, one parent-linked reversal, re-post is a no-op.)
 
-## NS-303 · In-doubt handling (FR-T4)
-- [ ] On rail timeout/unknown, route `AWAITING_SETTLEMENT → REVERSAL_PENDING` and enqueue a reversal via the outbox (in-doubt → reverse; never assume success/failure).
-- [ ] `REVERSAL_PENDING → REVERSED` once the compensating entries post.
+## NS-303 · In-doubt handling (FR-T4, DESIGN-NOTES §1)
+- [x] On rail timeout/unknown, route to `IN_DOUBT` and issue a **TSQ** before deciding (never assume success/failure): TSQ-settled → settle, TSQ-no-settlement → `REVERSAL_PENDING`, TSQ inconclusive after bounded retries → `MANUAL_REVIEW`. (mockrail gains a `QueryStatus` RPC + `RAIL_STATUS_DECLINED`; `RailClient.QueryStatus`; driver `handleInDoubt` with `WithTSQPolicy`. IN_DOUBT is its own persisted status + outbox event, so a crash re-issues the TSQ — never a re-send.)
+- [x] `REVERSAL_PENDING → REVERSED` once the compensating entries post (via NS-302). (Integration tests: TSQ-settled completes settlement with **source not refunded, destination credited**; TSQ-no-settlement reverses; inconclusive holds in MANUAL_REVIEW with money in suspense.)
 
 ## NS-304 · Idempotent duplicate rail callbacks (FR-T5)
 - [ ] `internal/switch/grpc.go` — switch gRPC rail-callback intake; a second "success" for an already-terminal transfer is a no-op (terminal-state guard).

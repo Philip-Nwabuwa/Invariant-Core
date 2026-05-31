@@ -26,7 +26,9 @@ type RailStatus int32
 
 const (
 	RailStatus_RAIL_STATUS_UNSPECIFIED RailStatus = 0
-	RailStatus_RAIL_STATUS_SUCCESS     RailStatus = 1 // RAIL_STATUS_DECLINED and timeout handling arrive in Sprint 3.
+	RailStatus_RAIL_STATUS_SUCCESS     RailStatus = 1
+	// RAIL_STATUS_DECLINED is an explicit refusal; the switch reverses.
+	RailStatus_RAIL_STATUS_DECLINED RailStatus = 2
 )
 
 // Enum value maps for RailStatus.
@@ -34,10 +36,12 @@ var (
 	RailStatus_name = map[int32]string{
 		0: "RAIL_STATUS_UNSPECIFIED",
 		1: "RAIL_STATUS_SUCCESS",
+		2: "RAIL_STATUS_DECLINED",
 	}
 	RailStatus_value = map[string]int32{
 		"RAIL_STATUS_UNSPECIFIED": 0,
 		"RAIL_STATUS_SUCCESS":     1,
+		"RAIL_STATUS_DECLINED":    2,
 	}
 )
 
@@ -199,6 +203,97 @@ func (x *SendToRailResponse) GetRailReference() string {
 	return ""
 }
 
+// QueryStatusRequest asks the rail about a transfer by its reference.
+type QueryStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reference     string                 `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatusRequest) Reset() {
+	*x = QueryStatusRequest{}
+	mi := &file_mockrail_v1_mockrail_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatusRequest) ProtoMessage() {}
+
+func (x *QueryStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_mockrail_v1_mockrail_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatusRequest.ProtoReflect.Descriptor instead.
+func (*QueryStatusRequest) Descriptor() ([]byte, []int) {
+	return file_mockrail_v1_mockrail_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *QueryStatusRequest) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
+// QueryStatusResponse is the rail's settlement verdict for the reference.
+// UNSPECIFIED means the rail could not determine the outcome (still in doubt).
+type QueryStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        RailStatus             `protobuf:"varint,1,opt,name=status,proto3,enum=mockrail.v1.RailStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryStatusResponse) Reset() {
+	*x = QueryStatusResponse{}
+	mi := &file_mockrail_v1_mockrail_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryStatusResponse) ProtoMessage() {}
+
+func (x *QueryStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_mockrail_v1_mockrail_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryStatusResponse.ProtoReflect.Descriptor instead.
+func (*QueryStatusResponse) Descriptor() ([]byte, []int) {
+	return file_mockrail_v1_mockrail_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *QueryStatusResponse) GetStatus() RailStatus {
+	if x != nil {
+		return x.Status
+	}
+	return RailStatus_RAIL_STATUS_UNSPECIFIED
+}
+
 var File_mockrail_v1_mockrail_proto protoreflect.FileDescriptor
 
 const file_mockrail_v1_mockrail_proto_rawDesc = "" +
@@ -212,14 +307,20 @@ const file_mockrail_v1_mockrail_proto_rawDesc = "" +
 	"\bcurrency\x18\x05 \x01(\tR\bcurrency\"l\n" +
 	"\x12SendToRailResponse\x12/\n" +
 	"\x06status\x18\x01 \x01(\x0e2\x17.mockrail.v1.RailStatusR\x06status\x12%\n" +
-	"\x0erail_reference\x18\x02 \x01(\tR\rrailReference*B\n" +
+	"\x0erail_reference\x18\x02 \x01(\tR\rrailReference\"2\n" +
+	"\x12QueryStatusRequest\x12\x1c\n" +
+	"\treference\x18\x01 \x01(\tR\treference\"F\n" +
+	"\x13QueryStatusResponse\x12/\n" +
+	"\x06status\x18\x01 \x01(\x0e2\x17.mockrail.v1.RailStatusR\x06status*\\\n" +
 	"\n" +
 	"RailStatus\x12\x1b\n" +
 	"\x17RAIL_STATUS_UNSPECIFIED\x10\x00\x12\x17\n" +
-	"\x13RAIL_STATUS_SUCCESS\x10\x012\\\n" +
+	"\x13RAIL_STATUS_SUCCESS\x10\x01\x12\x18\n" +
+	"\x14RAIL_STATUS_DECLINED\x10\x022\xae\x01\n" +
 	"\vRailService\x12M\n" +
 	"\n" +
-	"SendToRail\x12\x1e.mockrail.v1.SendToRailRequest\x1a\x1f.mockrail.v1.SendToRailResponseBIZGgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/mockrail/v1;mockrailv1b\x06proto3"
+	"SendToRail\x12\x1e.mockrail.v1.SendToRailRequest\x1a\x1f.mockrail.v1.SendToRailResponse\x12P\n" +
+	"\vQueryStatus\x12\x1f.mockrail.v1.QueryStatusRequest\x1a .mockrail.v1.QueryStatusResponseBIZGgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/mockrail/v1;mockrailv1b\x06proto3"
 
 var (
 	file_mockrail_v1_mockrail_proto_rawDescOnce sync.Once
@@ -234,21 +335,26 @@ func file_mockrail_v1_mockrail_proto_rawDescGZIP() []byte {
 }
 
 var file_mockrail_v1_mockrail_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_mockrail_v1_mockrail_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_mockrail_v1_mockrail_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_mockrail_v1_mockrail_proto_goTypes = []any{
-	(RailStatus)(0),            // 0: mockrail.v1.RailStatus
-	(*SendToRailRequest)(nil),  // 1: mockrail.v1.SendToRailRequest
-	(*SendToRailResponse)(nil), // 2: mockrail.v1.SendToRailResponse
+	(RailStatus)(0),             // 0: mockrail.v1.RailStatus
+	(*SendToRailRequest)(nil),   // 1: mockrail.v1.SendToRailRequest
+	(*SendToRailResponse)(nil),  // 2: mockrail.v1.SendToRailResponse
+	(*QueryStatusRequest)(nil),  // 3: mockrail.v1.QueryStatusRequest
+	(*QueryStatusResponse)(nil), // 4: mockrail.v1.QueryStatusResponse
 }
 var file_mockrail_v1_mockrail_proto_depIdxs = []int32{
 	0, // 0: mockrail.v1.SendToRailResponse.status:type_name -> mockrail.v1.RailStatus
-	1, // 1: mockrail.v1.RailService.SendToRail:input_type -> mockrail.v1.SendToRailRequest
-	2, // 2: mockrail.v1.RailService.SendToRail:output_type -> mockrail.v1.SendToRailResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	0, // 1: mockrail.v1.QueryStatusResponse.status:type_name -> mockrail.v1.RailStatus
+	1, // 2: mockrail.v1.RailService.SendToRail:input_type -> mockrail.v1.SendToRailRequest
+	3, // 3: mockrail.v1.RailService.QueryStatus:input_type -> mockrail.v1.QueryStatusRequest
+	2, // 4: mockrail.v1.RailService.SendToRail:output_type -> mockrail.v1.SendToRailResponse
+	4, // 5: mockrail.v1.RailService.QueryStatus:output_type -> mockrail.v1.QueryStatusResponse
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_mockrail_v1_mockrail_proto_init() }
@@ -262,7 +368,7 @@ func file_mockrail_v1_mockrail_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_mockrail_v1_mockrail_proto_rawDesc), len(file_mockrail_v1_mockrail_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

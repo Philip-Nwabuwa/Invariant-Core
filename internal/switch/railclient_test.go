@@ -55,3 +55,16 @@ func TestRailClient_Send(t *testing.T) {
 		t.Fatalf("verdict = %v, want VerdictSuccess", verdict)
 	}
 }
+
+// TestRailClient_QueryStatus proves the TSQ adapter talks to the real mockrail
+// and maps its settlement reply to a verdict.
+func TestRailClient_QueryStatus(t *testing.T) {
+	rail := transfer.NewRailClient(dialRail(t))
+	verdict, err := rail.QueryStatus(context.Background(), "ref-1")
+	if err != nil {
+		t.Fatalf("query status: %v", err)
+	}
+	if verdict != transfer.VerdictSuccess {
+		t.Fatalf("verdict = %v, want VerdictSuccess", verdict)
+	}
+}

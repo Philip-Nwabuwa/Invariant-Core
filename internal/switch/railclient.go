@@ -45,10 +45,34 @@ func (r *RailClient) Send(ctx context.Context, t Transfer) (RailVerdict, error) 
 		}
 		return VerdictUnknown, fmt.Errorf("rail send: %w", err)
 	}
-	if resp.GetStatus() == mockrailv1.RailStatus_RAIL_STATUS_SUCCESS {
-		return VerdictSuccess, nil
+	return verdictFromStatus(resp.GetStatus()), nil
+}
+
+// QueryStatus issues a TSQ for the reference and maps the rail's settlement
+// verdict. A timeout or an UNSPECIFIED reply means the rail could not determine
+// the outcome -> VerdictUnknown, and the caller keeps the transfer in doubt.
+func (r *RailClient) QueryStatus(ctx context.Context, reference string) (RailVerdict, error) {
+	resp, err := r.client.QueryStatus(ctx, &mockrailv1.QueryStatusRequest{Reference: reference})
+	if err != nil {
+		if isIndeterminate(err) {
+			return VerdictUnknown, nil
+		}
+		return VerdictUnknown, fmt.Errorf("rail query status: %w", err)
 	}
-	return VerdictDeclined, nil
+	return verdictFromStatus(resp.GetStatus()), nil
+}
+
+// verdictFromStatus maps a rail status to a driver verdict. SUCCESS settles,
+// DECLINED reverses, and anything else (UNSPECIFIED) is unknown.
+func verdictFromStatus(s mockrailv1.RailStatus) RailVerdict {
+	switch s {
+	case mockrailv1.RailStatus_RAIL_STATUS_SUCCESS:
+		return VerdictSuccess
+	case mockrailv1.RailStatus_RAIL_STATUS_DECLINED:
+		return VerdictDeclined
+	default:
+		return VerdictUnknown
+	}
 }
 
 // isIndeterminate reports whether err means the rail outcome is unknown (a
