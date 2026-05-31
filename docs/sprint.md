@@ -132,10 +132,10 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 **Decisions:** public REST via `chi` on `:8080`; switch gRPC `:50052`; `mockrail` on `:50053`; transfer domain in `internal/switch`; ledger reached via gRPC client; idempotency durable in Postgres with a Redis (`REDIS_ADDR`) fast-path (ADR-0003); externalized transfer state lives in `transactions.status`.
 
 ## NS-201 · REST `POST /v1/transfers` (FR-T1)
-- [ ] `internal/switch/transport/rest.go` — `chi` router; `POST /v1/transfers` decoding `{source, destination, amount_minor, currency, reference}` + a required `Idempotency-Key` header; request validation (positive amount, known currency).
-- [ ] `GET /v1/transfers/{id}` — return the current transfer state.
-- [ ] `api/openapi/switch.yaml` — document both endpoints + error shapes.
-- [ ] Wire the router into `cmd/switchd` alongside `/healthz` (via `serviceboot`).
+- [x] `internal/switch/transport/rest.go` — `chi` router; `POST /v1/transfers` decoding `{source, destination, amount_minor, currency, reference}` + a required `Idempotency-Key` header; request validation (positive amount, known currency). (Domain types in `internal/switch/transfer.go` — `package transfer`; behind a `Service` interface, NS-201 wires `StubService`.)
+- [x] `GET /v1/transfers/{id}` — return the current transfer state.
+- [x] `api/openapi/switch.yaml` — document both endpoints + error shapes.
+- [x] Wire the router into `cmd/switchd` alongside `/healthz` (via `serviceboot`). (Added `Options.RegisterHTTP` hook → `health.NewServer` register callback; REST mounted at `/`, `/healthz`+`/metrics` still take precedence.)
 
 ## NS-202 · Durable idempotency store (FR-T2, ADR-0003)
 - [ ] `internal/switch/idempotency.go` — reserve the key (`status=in_progress`, store `request_fingerprint`) in `idempotency_keys`; on completion store `response` + `transaction_id` + `status`.

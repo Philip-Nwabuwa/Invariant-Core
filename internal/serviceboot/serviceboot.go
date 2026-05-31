@@ -38,6 +38,10 @@ type Options struct {
 	// and before it serves, so callers can register their service surface. When
 	// nil the server starts with an empty surface (Sprint 0 behaviour).
 	RegisterGRPC func(*grpc.Server)
+	// RegisterHTTP, if set, is called with the health server's mux after
+	// /healthz and /metrics are mounted, so a service can attach extra routes
+	// (e.g. switchd's public REST API) on the same HealthAddr listener.
+	RegisterHTTP func(*http.ServeMux)
 	// Cleanup, if set, runs during graceful shutdown (e.g. closing a DB pool).
 	Cleanup func()
 }
@@ -57,7 +61,7 @@ func Run(opts Options) error {
 	}
 
 	reg := metrics.New()
-	healthSrv := health.NewServer(opts.HealthAddr, reg.Handler())
+	healthSrv := health.NewServer(opts.HealthAddr, reg.Handler(), opts.RegisterHTTP)
 
 	serveErr := make(chan error, 2)
 	go func() {

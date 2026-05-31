@@ -11,11 +11,18 @@ import (
 // NewServer builds an *http.Server listening on addr that serves /healthz
 // (200 JSON {"status":"ok"}) and, when metrics is non-nil, /metrics. The caller
 // owns the lifecycle (ListenAndServe / Shutdown).
-func NewServer(addr string, metrics http.Handler) *http.Server {
+//
+// register, when non-nil, is called with the mux after /healthz and /metrics
+// are mounted, so a service can attach its own routes (e.g. switchd's REST API)
+// on the same listener without disturbing health/metrics.
+func NewServer(addr string, metrics http.Handler, register func(*http.ServeMux)) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handleHealthz)
 	if metrics != nil {
 		mux.Handle("/metrics", metrics)
+	}
+	if register != nil {
+		register(mux)
 	}
 	return &http.Server{
 		Addr:              addr,
