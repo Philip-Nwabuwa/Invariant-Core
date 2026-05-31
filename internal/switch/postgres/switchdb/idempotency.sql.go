@@ -58,22 +58,24 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, key string) (Idempotenc
 }
 
 const reserveIdempotencyKey = `-- name: ReserveIdempotencyKey :one
-INSERT INTO idempotency_keys (key, request_fingerprint, status)
-VALUES ($1, $2, 'in_progress')
+INSERT INTO idempotency_keys (key, request_fingerprint, status, expires_at)
+VALUES ($1, $2, 'in_progress', now() + make_interval(secs => $3))
 ON CONFLICT (key) DO NOTHING
 RETURNING key, request_fingerprint, transaction_id, response, status, created_at, expires_at
 `
 
 type ReserveIdempotencyKeyParams struct {
-	Key                string `json:"key"`
-	RequestFingerprint string `json:"request_fingerprint"`
+	Key                string  `json:"key"`
+	RequestFingerprint string  `json:"request_fingerprint"`
+	LeaseSeconds       float64 `json:"lease_seconds"`
 }
 
-// Atomically claim a key. ON CONFLICT DO NOTHING means a second concurrent
-// caller gets no row back (pgx.ErrNoRows) rather than an error, so the Go layer
-// can fall through to GetIdempotencyKey and inspect the existing record.
+// Atomically claim a key with a lease (expires_at). ON CONFLICT DO NOTHING means
+// a second concurrent caller gets no row back (pgx.ErrNoRows) rather than an
+// error, so the Go layer can fall through to GetIdempotencyKey and inspect the
+// existing record (and take it over if the lease has expired).
 func (q *Queries) ReserveIdempotencyKey(ctx context.Context, arg ReserveIdempotencyKeyParams) (IdempotencyKey, error) {
-	row := q.db.QueryRow(ctx, reserveIdempotencyKey, arg.Key, arg.RequestFingerprint)
+	row := q.db.QueryRow(ctx, reserveIdempotencyKey, arg.Key, arg.RequestFingerprint, arg.LeaseSeconds)
 	var i IdempotencyKey
 	err := row.Scan(
 		&i.Key,

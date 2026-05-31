@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -48,12 +49,17 @@ type ReserveResult struct {
 	TransactionID *uuid.UUID
 }
 
+// defaultIdempotencyLease bounds how long an in-progress key blocks a replay
+// before it is treated as a crashed holder and taken over (DESIGN-NOTES §5).
+const defaultIdempotencyLease = 30 * time.Second
+
 // IdempotencyStore is the durable (Postgres) deduplication record. ADR-0003
 // reserves a Redis fast-path in front of this; that is deferred — Postgres is
 // the record of truth.
 type IdempotencyStore struct {
-	pool *pgxpool.Pool
-	q    *switchdb.Queries
+	pool  *pgxpool.Pool
+	q     *switchdb.Queries
+	lease time.Duration
 }
 
 // IdempotencyStore implements Idempotency — checked at compile time.
@@ -61,7 +67,13 @@ var _ Idempotency = (*IdempotencyStore)(nil)
 
 // NewIdempotencyStore builds a store over the given pool.
 func NewIdempotencyStore(pool *pgxpool.Pool) *IdempotencyStore {
-	return &IdempotencyStore{pool: pool, q: switchdb.New(pool)}
+	return &IdempotencyStore{pool: pool, q: switchdb.New(pool), lease: defaultIdempotencyLease}
+}
+
+// WithLease overrides the in-progress lease (used by tests).
+func (s *IdempotencyStore) WithLease(d time.Duration) *IdempotencyStore {
+	s.lease = d
+	return s
 }
 
 // Reserve atomically claims key for fingerprint. The INSERT ... ON CONFLICT DO
@@ -71,6 +83,7 @@ func (s *IdempotencyStore) Reserve(ctx context.Context, key, fingerprint string)
 	_, err := s.q.ReserveIdempotencyKey(ctx, switchdb.ReserveIdempotencyKeyParams{
 		Key:                key,
 		RequestFingerprint: fingerprint,
+		LeaseSeconds:       s.lease.Seconds(),
 	})
 	if err == nil {
 		return ReserveResult{Outcome: OutcomeReserved}, nil
@@ -96,8 +109,36 @@ func (s *IdempotencyStore) Reserve(ctx context.Context, key, fingerprint string)
 			TransactionID: existing.TransactionID,
 		}, nil
 	default: // in_progress
+		return s.inProgressResult(ctx, key, existing)
+	}
+}
+
+// inProgressResult decides what a replay of an in-progress key sees. Within the
+// lease the original may still be completing, so it is genuinely in progress.
+// Past the lease the original holder is presumed crashed: re-attach to the
+// transfer it created (the customer key is bound on the transfer row even if the
+// idempotency record was never completed) and replay its live state. The poller
+// then drives that transfer to terminal (DESIGN-NOTES §5).
+func (s *IdempotencyStore) inProgressResult(ctx context.Context, key string, existing switchdb.IdempotencyKey) (ReserveResult, error) {
+	leaseLive := existing.ExpiresAt != nil && existing.ExpiresAt.After(time.Now())
+	if leaseLive {
 		return ReserveResult{Outcome: OutcomeInProgress, TransactionID: existing.TransactionID}, nil
 	}
+
+	txID := existing.TransactionID
+	if txID == nil {
+		// The idempotency record was never linked, but the transfer row carries
+		// the customer key — resolve it there.
+		k := key
+		if id, lerr := s.q.GetTransferIDByIdempotencyKey(ctx, &k); lerr == nil {
+			txID = &id
+		}
+	}
+	if txID != nil {
+		return ReserveResult{Outcome: OutcomeReplay, Status: IdemInProgress, TransactionID: txID}, nil
+	}
+	// No transfer was ever created: still treat as in-progress (the caller retries).
+	return ReserveResult{Outcome: OutcomeInProgress}, nil
 }
 
 // Complete records the terminal outcome for a previously reserved key. txID may

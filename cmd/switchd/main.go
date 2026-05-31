@@ -69,6 +69,14 @@ func main() {
 	// The outbox poller drives every post-debit step (rail, settlement, reversal)
 	// asynchronously, so a crash mid-flow resumes from the durable event log
 	// rather than losing the work. It runs until shutdown cancels pollCtx.
+	// Recovery sweep: re-enqueue any transfer stranded by a crash before the
+	// poller starts, so no debit is left without a path to a terminal state.
+	if n, rerr := transfer.NewRecoverer(store).Recover(connectCtx); rerr != nil {
+		log.Printf("switchd: recovery sweep failed (continuing): %v", rerr)
+	} else if n > 0 {
+		log.Printf("switchd: recovery re-enqueued %d stranded transfer(s)", n)
+	}
+
 	pollCtx, stopPoller := context.WithCancel(context.Background())
 	poller := outbox.NewPoller(store.Queries(), driver, outbox.Config{})
 	go poller.Run(pollCtx)

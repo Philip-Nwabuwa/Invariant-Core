@@ -206,7 +206,7 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] Deterministic by `MOCKRAIL_SEED` so a run is reproducible. (Each outcome derives from `hash(seed, reference, dimension)` — no shared RNG, so it is reproducible per transfer regardless of concurrency/order; verified by a same-seed/different-seed test.)
 
 ## NS-306 · Crash recovery (NFR-4)
-- [ ] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox.
+- [x] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox. (`internal/switch/recovery.go` — `Recoverer.Recover` re-enqueues every resumable transfer with no live outbox event (`ListStuckTransfers`), mapping status→driving event; idempotent handlers make a duplicate event a no-op. `cmd/switchd` runs the sweep at boot before the poller. Idempotency lease takeover (`idempotency.go`): a replay past the in-progress lease re-attaches to the transfer the crashed holder created (`GetTransferIDByIdempotencyKey`) rather than starting a second one — DESIGN-NOTES §5.)
 - [ ] Scripted verification that no work is lost.
 
 ## NS-307 · Chaos test — zero stranded debits (AC-1)

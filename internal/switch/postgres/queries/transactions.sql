@@ -36,6 +36,26 @@ SET status = sqlc.arg(status),
     metadata = metadata || jsonb_build_object('debit_leg_tx_id', sqlc.arg(debit_leg_tx_id)::text)
 WHERE id = sqlc.arg(id);
 
+-- name: GetTransferIDByIdempotencyKey :one
+-- Resolve the lifecycle transfer a customer key created. Used by idempotency
+-- lease takeover: a replay past the lease re-attaches to this transfer.
+SELECT id FROM transactions
+WHERE idempotency_key = $1 AND metadata ? 'source';
+
+-- name: ListStuckTransfers :many
+-- Resumable transfers with no live (claimable) outbox event — i.e. an event was
+-- lost or dead-lettered. The recovery sweep re-enqueues their driving event.
+SELECT t.* FROM transactions t
+WHERE t.type = 'transfer'
+  AND t.status IN ('pending','debited','in_doubt','reversal_pending')
+  AND NOT EXISTS (
+    SELECT 1 FROM outbox o
+    WHERE o.aggregate_id = t.id
+      AND o.published_at IS NULL
+      AND o.dead_letter = false
+  )
+ORDER BY t.initiated_at;
+
 -- name: GetTransferByReference :one
 -- Find the switch's lifecycle transfer row for a reference. The `metadata ?
 -- 'source'` predicate selects the lifecycle row (which carries source/dest/

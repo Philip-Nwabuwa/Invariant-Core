@@ -1,9 +1,10 @@
 -- name: ReserveIdempotencyKey :one
--- Atomically claim a key. ON CONFLICT DO NOTHING means a second concurrent
--- caller gets no row back (pgx.ErrNoRows) rather than an error, so the Go layer
--- can fall through to GetIdempotencyKey and inspect the existing record.
-INSERT INTO idempotency_keys (key, request_fingerprint, status)
-VALUES ($1, $2, 'in_progress')
+-- Atomically claim a key with a lease (expires_at). ON CONFLICT DO NOTHING means
+-- a second concurrent caller gets no row back (pgx.ErrNoRows) rather than an
+-- error, so the Go layer can fall through to GetIdempotencyKey and inspect the
+-- existing record (and take it over if the lease has expired).
+INSERT INTO idempotency_keys (key, request_fingerprint, status, expires_at)
+VALUES ($1, $2, 'in_progress', now() + make_interval(secs => sqlc.arg(lease_seconds)))
 ON CONFLICT (key) DO NOTHING
 RETURNING *;
 

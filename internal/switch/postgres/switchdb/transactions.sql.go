@@ -88,6 +88,20 @@ func (q *Queries) GetTransferForUpdate(ctx context.Context, id uuid.UUID) (Trans
 	return i, err
 }
 
+const getTransferIDByIdempotencyKey = `-- name: GetTransferIDByIdempotencyKey :one
+SELECT id FROM transactions
+WHERE idempotency_key = $1 AND metadata ? 'source'
+`
+
+// Resolve the lifecycle transfer a customer key created. Used by idempotency
+// lease takeover: a replay past the lease re-attaches to this transfer.
+func (q *Queries) GetTransferIDByIdempotencyKey(ctx context.Context, idempotencyKey *string) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getTransferIDByIdempotencyKey, idempotencyKey)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const insertTransfer = `-- name: InsertTransfer :one
 INSERT INTO transactions (reference, type, status, idempotency_key, currency, metadata)
 VALUES ($1, 'transfer', $2, $3, $4, $5)
@@ -140,6 +154,52 @@ ORDER BY initiated_at
 // Non-terminal transfers, for the recovery sweep (NS-306). Ordered oldest-first.
 func (q *Queries) ListResumableTransfers(ctx context.Context) ([]Transaction, error) {
 	rows, err := q.db.Query(ctx, listResumableTransfers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Reference,
+			&i.Type,
+			&i.Status,
+			&i.IdempotencyKey,
+			&i.ParentTransactionID,
+			&i.Currency,
+			&i.InitiatedAt,
+			&i.SettledAt,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStuckTransfers = `-- name: ListStuckTransfers :many
+SELECT t.id, t.reference, t.type, t.status, t.idempotency_key, t.parent_transaction_id, t.currency, t.initiated_at, t.settled_at, t.metadata FROM transactions t
+WHERE t.type = 'transfer'
+  AND t.status IN ('pending','debited','in_doubt','reversal_pending')
+  AND NOT EXISTS (
+    SELECT 1 FROM outbox o
+    WHERE o.aggregate_id = t.id
+      AND o.published_at IS NULL
+      AND o.dead_letter = false
+  )
+ORDER BY t.initiated_at
+`
+
+// Resumable transfers with no live (claimable) outbox event — i.e. an event was
+// lost or dead-lettered. The recovery sweep re-enqueues their driving event.
+func (q *Queries) ListStuckTransfers(ctx context.Context) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listStuckTransfers)
 	if err != nil {
 		return nil, err
 	}
