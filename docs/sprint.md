@@ -77,13 +77,13 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 **Decisions:** sqlc package `ledgerdb` → `internal/ledger/postgres/ledgerdb`, queries in `internal/ledger/postgres/queries`, `pgx/v5` pool · ledger writes at `SERIALIZABLE` with a bounded retry on SQLSTATE `40001` (ADR-0002) · domain layer in `internal/ledger`, gRPC server in `cmd/ledger` on `:50051` (replaces the Sprint-0 Ping-only surface) · property lib `pgregory.net/rapid`.
 
 ## NS-101 · Repositories — `accounts` + `entries` + `transactions` (sqlc/pgx)
-- [ ] `internal/ledger/postgres/queries/accounts.sql` — `CreateAccount`, `GetAccountByCode`, `GetAccountByID`.
-- [ ] `internal/ledger/postgres/queries/transactions.sql` — `InsertTransaction`, `GetTransaction`, `ListTransactionsByWindow`.
-- [ ] `internal/ledger/postgres/queries/entries.sql` — `InsertEntry`, `ListEntriesByTransaction`, `ListEntriesByAccount`, `SumEntriesByAccount` (derived balance).
-- [ ] `internal/ledger/postgres/queries/balances.sql` — `GetCachedBalance`, `UpsertCachedBalance`.
-- [ ] `make sqlc` generates `internal/ledger/postgres/ledgerdb`; commit the generated code.
-- [ ] `internal/ledger/postgres/pool.go` — `pgxpool` constructor from `DB_URL`; wire into `cmd/ledger`.
-- [ ] `internal/ledger/postgres/repository.go` — repository over `ledgerdb.Queries` + a `WithSerializableTx(ctx, fn)` tx runner.
+- [x] `internal/ledger/postgres/queries/accounts.sql` — `CreateAccount`, `GetAccountByCode`, `GetAccountByID`.
+- [x] `internal/ledger/postgres/queries/transactions.sql` — `InsertTransaction`, `GetTransaction`, `ListTransactionsByWindow`.
+- [x] `internal/ledger/postgres/queries/entries.sql` — `InsertEntry`, `ListEntriesByTransaction`, `ListEntriesByAccount`, `SumEntriesByAccount` (derived balance).
+- [x] `internal/ledger/postgres/queries/balances.sql` — `GetCachedBalance`, `UpsertCachedBalance`.
+- [x] `make sqlc` generates `internal/ledger/postgres/ledgerdb`; commit the generated code. (sqlc.yaml: uuid→google/uuid, timestamptz→time.Time overrides.)
+- [x] `internal/ledger/postgres/pool.go` — `pgxpool` constructor from `DB_URL`; wire into `cmd/ledger`. (constructor done; cmd/ledger wiring lands in NS-106.)
+- [x] `internal/ledger/postgres/repository.go` — repository over `ledgerdb.Queries` + a `WithSerializableTx(ctx, fn)` tx runner.
 
 ## NS-102 · `PostTransaction` at SERIALIZABLE (FR-L1/L2)
 - [ ] Domain types `internal/ledger/{account,entry,transaction}.go` — `EntryInput{AccountCode, Direction, Amount money.Amount}`, `PostRequest{Reference, Type, Entries…}`.
