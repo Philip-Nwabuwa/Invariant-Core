@@ -254,12 +254,12 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 - [x] `pending_reversal` detection: a timed-out/failed internal record whose reversal hasn't settled (this feeds Sprint 5's loop). (`classifyUnmatchedInternal`: a `failed`/`timed_out` transfer with no settled `reversal` record for its reference → `pending_reversal`, else `unmatched_internal`.)
 
 ## NS-405 · Reports + persistence (FR-C4, FR-C5)
-- [ ] `internal/reconcile/report.go` — human-readable text + machine-readable JSON.
-- [ ] `internal/reconcile/store.go` — persist `recon_runs` (inputs, timestamps, counts, summary) + `recon_exceptions` rows.
+- [x] `internal/reconcile/report.go` — human-readable text + machine-readable JSON. (`Report`/`NewReport`; `Text()` summary + per-exception lines, `JSON()` via `MarshalIndent`. Omits wall-clock time so identical inputs render byte-identically; verified by `TestReport_Deterministic`.)
+- [x] `internal/reconcile/store.go` — persist `recon_runs` (inputs, timestamps, counts, summary) + `recon_exceptions` rows. (New sqlc `recondb` package (3rd `sqlc.yaml` block; `recon.sql`); `Store.Persist` opens `running` → inserts every exception → `FinishReconRun` (`completed`, counts, `summary` JSONB with the input fingerprint) in one tx, mirroring `internal/switch/store.go`. Testcontainers `TestStore_PersistAndIdempotentGuard` confirms rows + counts.)
 
 ## NS-406 · Determinism (FR-C6, AC-4)
-- [ ] Sort/key deterministically so output is independent of input row order and worker scheduling.
-- [ ] Re-running the same inputs does not double-count (idempotent persistence).
+- [x] Sort/key deterministically so output is independent of input row order and worker scheduling. (`sortExceptions` orders by `(category, reference, delta)`; report category summary sorted; `TestMatch_DeterministicOrder` + `TestReport_Deterministic` assert stability across repeated runs.)
+- [x] Re-running the same inputs does not double-count (idempotent persistence). (`FileFingerprint` = streamed SHA-256 of the input pair, stored in `summary->>'input_fingerprint'`; `Store.FindByFingerprint` lets the CLI skip a re-persist of identical inputs. `TestStore_PersistAndIdempotentGuard` proves the guard leaves the exception row count unchanged.)
 
 ## NS-407 · `scripts/gen_settlement` — fixture generator
 - [ ] Generate a settlement file with K injected discrepancies spanning every category (unmatched, amount-mismatch, duplicate, pending-reversal).
