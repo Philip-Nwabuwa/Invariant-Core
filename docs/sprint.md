@@ -98,8 +98,8 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] Test: derived balance == cached balance after a random series of posts.
 
 ## NS-104 · Append-only enforcement (FR-L3)
-- [ ] Audit the repository: entries are insert-only — no UPDATE/DELETE path anywhere.
-- [ ] Test asserting the DB trigger `trg_entries_no_update` rejects a raw UPDATE and a DELETE on `entries` (expect error).
+- [x] Audit the repository: entries are insert-only — no UPDATE/DELETE path anywhere.
+- [x] Test asserting the DB trigger `trg_entries_no_update` rejects a raw UPDATE and a DELETE on `entries` (expect error).
 
 ## NS-105 · Property-based conservation test (AC-2)
 - [ ] Add `pgregory.net/rapid` to `go.mod`.
