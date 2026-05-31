@@ -108,7 +108,9 @@ func (o *Orchestrator) Create(ctx context.Context, key string, req CreateRequest
 		return nil
 	}
 
-	// DEBIT_PENDING: idempotency reserved + validated (reservation wired NS-205).
+	// DEBIT_PENDING: ready to debit. Deduplication runs in IdempotentService,
+	// which wraps this orchestrator and reserves the key before Create is even
+	// called — so a duplicate never reaches this row.
 	if err := advance(StateDebitPending, nil); err != nil {
 		return View{}, err
 	}

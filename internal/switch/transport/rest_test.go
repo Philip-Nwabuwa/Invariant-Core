@@ -1,18 +1,64 @@
 package transport
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/google/uuid"
 
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
 )
 
-// newTestServer wires the handler over a real (in-memory) stub service.
+// stubService is an in-memory transfer.Service used only by these transport
+// tests: it validates the request, assigns an id, marks the transfer SETTLED,
+// and keeps it in memory so a POST followed by a GET round-trips. It never
+// touches the rail, the ledger, or Postgres — the HTTP edge is what's under test.
+type stubService struct {
+	mu    sync.Mutex
+	store map[string]transfer.View
+}
+
+func newStubService() *stubService {
+	return &stubService{store: make(map[string]transfer.View)}
+}
+
+func (s *stubService) Create(_ context.Context, _ string, req transfer.CreateRequest) (transfer.View, error) {
+	if err := req.Validate(); err != nil {
+		return transfer.View{}, err
+	}
+	view := transfer.View{
+		ID:          uuid.NewString(),
+		Reference:   req.Reference,
+		Source:      req.Source,
+		Destination: req.Destination,
+		Amount:      req.Amount,
+		Currency:    req.Currency,
+		State:       transfer.StateSettled,
+	}
+	s.mu.Lock()
+	s.store[view.ID] = view
+	s.mu.Unlock()
+	return view, nil
+}
+
+func (s *stubService) Get(_ context.Context, id string) (transfer.View, error) {
+	s.mu.Lock()
+	view, ok := s.store[id]
+	s.mu.Unlock()
+	if !ok {
+		return transfer.View{}, transfer.ErrNotFound
+	}
+	return view, nil
+}
+
+// newTestServer wires the handler over the in-memory stub service.
 func newTestServer() http.Handler {
-	return NewHandler(transfer.NewStubService()).Routes()
+	return NewHandler(newStubService()).Routes()
 }
 
 func doRequest(t *testing.T, srv http.Handler, method, path, body string, headers map[string]string) *httptest.ResponseRecorder {

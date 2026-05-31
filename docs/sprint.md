@@ -155,9 +155,9 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 - [x] Tests: bufconn smoke (success / latency respected / ctx-cancel) + switch `RailClient` against the real server over bufconn.
 
 ## NS-205 · switch → ledger debit/credit (FR-T3)
-- [ ] `internal/switch/ledgerclient.go` — gRPC client to ledger `:50051`.
-- [ ] On `DEBITED`: post debit(source) → credit(`SETTLEMENT`); on `SETTLED`: post debit(`SETTLEMENT`) → credit(destination). Each call carries the transfer `reference`.
-- [ ] Test: after a happy-path settle, ledger balances reflect the move exactly once.
+- [x] `internal/switch/ledgerclient.go` — gRPC client to ledger `:50051` behind the `Ledger` interface. (Idempotency moved to an `IdempotentService` decorator (`idempotent.go`) that reserves the key *before* the orchestrator creates any row — so a duplicate never writes a second `transactions` row. `cmd/switchd` now wires the real Postgres pool + ledger/rail gRPC clients + decorator; `StubService` deleted, replaced by a transport-local test double.)
+- [x] On `DEBITED`: post debit(source) → credit(`SETTLEMENT`); on `SETTLED`: post debit(`SETTLEMENT`) → credit(destination). Each call carries the transfer `reference` and posts as a separate balanced ledger transaction (two rows linked by reference, per the data-model decision).
+- [x] Test: after a happy-path settle, ledger balances reflect the move exactly once. (`TestLedgerClient_BothLegsMoveMoneyOnce` over a real bufconn ledger; `TestSettle_EndToEnd` exercises the full stack over one Postgres and asserts replay is a no-op (one `transactions` row), altered body → conflict, and SETTLEMENT nets to zero.)
 
 ## NS-206 · correlation-id + tracing (NFR-7)
 - [ ] Propagate `correlation_id` from the REST request (or generate one) through rail + ledger calls via context + `pkg/logging`.

@@ -55,6 +55,9 @@ type IdempotencyStore struct {
 	q    *switchdb.Queries
 }
 
+// IdempotencyStore implements Idempotency — checked at compile time.
+var _ Idempotency = (*IdempotencyStore)(nil)
+
 // NewIdempotencyStore builds a store over the given pool.
 func NewIdempotencyStore(pool *pgxpool.Pool) *IdempotencyStore {
 	return &IdempotencyStore{pool: pool, q: switchdb.New(pool)}
