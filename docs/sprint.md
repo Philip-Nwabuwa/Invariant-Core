@@ -217,12 +217,12 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] Reversal-latency histogram. (`switch_reversal_latency_seconds`; observed in `handleReversal` as `time.Since(InitiatedAt)` when the reversal advances. `transferDetail` gained `InitiatedAt`.)
 - [x] Outbox-lag gauge (from NS-301) surfaced on `/metrics`. (`switch_outbox_lag_seconds`, ticked from `OutboxLagSeconds` every 5s. `serviceboot.Options` gained a `Registry` field so `cmd/switchd` owns the registry, builds the instruments, and serves them. Verified live: 8 transfers → `settled=5,reversed=3`, reversal histogram count=3, lag=0.)
 
-## Verification (Sprint 3 DoD)
-1. [ ] `test/chaos` ends with zero stranded debits over N transfers (AC-1).
-2. [ ] Kill `switchd` mid-flow; after restart the debit is matched by a completed reversal — no stranded debit.
-3. [ ] A duplicate rail callback is a no-op (state unchanged).
-4. [ ] Prometheus shows the outcome split + reversal-latency histogram + outbox lag.
-5. [ ] `go test ./... -race` + `make lint` green.
+## Verification (Sprint 3 DoD) — ✅ PASSED 2026-05-31
+1. [x] `test/chaos` ends with zero stranded debits over N transfers (AC-1). (60 transfers under seeded chaos + a mid-flow crash; every transfer reaches its seed-determined terminal state and balances reconcile exactly. Split settled=40/reversed=14/manual_review=6, reproducible across runs.)
+2. [x] Kill `switchd` mid-flow; after restart the debit is matched by a completed reversal — no stranded debit. (`scripts/crash_recovery_demo.sh`: real `kill -9` at `debited` → resumes to `SETTLED`, one debit leg. The crash-then-reverse path is covered by `test/chaos` (14 reversals all began stranded at `debited`).)
+3. [x] A duplicate rail callback is a no-op (state unchanged). (`TestRailCallback_DuplicateIsNoOp`, re-confirmed green.)
+4. [x] Prometheus shows the outcome split + reversal-latency histogram + outbox lag. (Live `:8080/metrics`: `switch_transfer_outcomes_total{settled=5,reversed=3}`, `switch_reversal_latency_seconds_count=3`, `switch_outbox_lag_seconds=0`.)
+5. [x] `go test ./... -race` + `make lint` green. (Whole repo: all packages ok; lint 0 issues.)
 
 ---
 
