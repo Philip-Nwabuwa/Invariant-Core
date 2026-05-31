@@ -202,8 +202,8 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] Test: a duplicate callback changes nothing. (`TestRailCallback_DuplicateIsNoOp` over real gRPC/bufconn: SUCCESS settles, the duplicate leaves one settlement leg + balances unchanged; unknown reference → NotFound.)
 
 ## NS-305 · `mockrail` chaos (ARCHITECTURE §2.3)
-- [ ] Env-seeded probabilities: added latency, hard timeout (no response), duplicate-success callback, explicit decline.
-- [ ] Deterministic by `MOCKRAIL_SEED` so a run is reproducible.
+- [x] Env-seeded probabilities: added latency, hard timeout (no response), duplicate-success callback, explicit decline (+ a TSQ-timeout knob). (`MOCKRAIL_P_TIMEOUT/P_DECLINE/P_DUPLICATE/P_TSQ_TIMEOUT`; duplicate callbacks dial the switch via opt-in `SWITCH_CALLBACK_TARGET`. The TSQ reports the *true* outcome and can disagree with a timed-out send — the "settled-but-we-timed-out" case.)
+- [x] Deterministic by `MOCKRAIL_SEED` so a run is reproducible. (Each outcome derives from `hash(seed, reference, dimension)` — no shared RNG, so it is reproducible per transfer regardless of concurrency/order; verified by a same-seed/different-seed test.)
 
 ## NS-306 · Crash recovery (NFR-4)
 - [ ] Kill `switchd` mid-flow (between debit and settlement); on restart the poller resumes pending reversals/rail calls from the outbox.
