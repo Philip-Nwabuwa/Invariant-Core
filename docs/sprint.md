@@ -250,8 +250,8 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 - [ ] Stream inputs (don't hold whole files in memory); the index is keyed, not the full file.
 
 ## NS-404 · Exception categories (FR-C3)
-- [ ] `internal/reconcile/exceptions.go` — `unmatched_internal`, `unmatched_external`, `amount_mismatch`, `pending_reversal`, `duplicate`.
-- [ ] `pending_reversal` detection: a timed-out/failed internal record whose reversal hasn't settled (this feeds Sprint 5's loop).
+- [x] `internal/reconcile/exceptions.go` — `unmatched_internal`, `unmatched_external`, `amount_mismatch`, `pending_reversal`, `duplicate`. (`Category` enum mirrors the `recon_exceptions` CHECK exactly; `Exception` carries the internal/external `canonical.Record` + `DeltaMinor` for amount mismatches.)
+- [x] `pending_reversal` detection: a timed-out/failed internal record whose reversal hasn't settled (this feeds Sprint 5's loop). (`classifyUnmatchedInternal`: a `failed`/`timed_out` transfer with no settled `reversal` record for its reference → `pending_reversal`, else `unmatched_internal`.)
 
 ## NS-405 · Reports + persistence (FR-C4, FR-C5)
 - [ ] `internal/reconcile/report.go` — human-readable text + machine-readable JSON.
