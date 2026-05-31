@@ -86,11 +86,11 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] `internal/ledger/postgres/repository.go` — repository over `ledgerdb.Queries` + a `WithSerializableTx(ctx, fn)` tx runner.
 
 ## NS-102 · `PostTransaction` at SERIALIZABLE (FR-L1/L2)
-- [ ] Domain types `internal/ledger/{account,entry,transaction}.go` — `EntryInput{AccountCode, Direction, Amount money.Amount}`, `PostRequest{Reference, Type, Entries…}`.
-- [ ] `internal/ledger/service.go` `PostTransaction`: open a SERIALIZABLE tx → insert transaction → insert entries → commit; application-side balance check (`sum(debits) == sum(credits)`) before commit, with the DEFERRED DB trigger as backstop.
-- [ ] Typed errors: `ErrUnbalanced`, `ErrTooFewEntries` (<2), `ErrMixedCurrency`, `ErrUnknownAccount`.
-- [ ] Serialization-failure retry wrapper: detect pgx `40001`, retry with bounded attempts + backoff (ADR-0002).
-- [ ] Unit tests: balanced posts succeed; unbalanced / single-entry / mixed-currency are rejected.
+- [x] Domain types `internal/ledger/{account,entry,transaction}.go` — `EntryInput{AccountCode, Direction, Amount money.Amount}`, `PostRequest{Reference, Type, Entries…}`.
+- [x] `internal/ledger/service.go` `PostTransaction`: open a SERIALIZABLE tx → insert transaction → insert entries → commit; application-side balance check (`sum(debits) == sum(credits)`) before commit, with the DEFERRED DB trigger as backstop.
+- [x] Typed errors: `ErrUnbalanced`, `ErrTooFewEntries` (<2), `ErrMixedCurrency`, `ErrUnknownAccount`. (Plus `ErrNonPositiveAmount`.)
+- [x] Serialization-failure retry wrapper: detect pgx `40001`, retry with bounded attempts + backoff (ADR-0002).
+- [x] Unit tests: balanced posts succeed; unbalanced / single-entry / mixed-currency are rejected.
 
 ## NS-103 · `GetBalance` derived + optional cache (FR-L4)
 - [ ] `GetBalance(accountCode)` derives from entries via `SumEntriesByAccount`, applying the account's normal-balance direction (asset/expense debit-normal; liability/equity/revenue credit-normal).
