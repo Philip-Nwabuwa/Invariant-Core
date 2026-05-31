@@ -240,10 +240,10 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 - [ ] Replace the Sprint-0 "not implemented" stub with the real command wiring.
 
 ## NS-402 · Adapters → canonical (FR-C1)
-- [ ] `internal/reconcile/adapters/ledger.go` — read the ledger `ExportTransactions` output → `canonical.Record`.
-- [ ] `internal/reconcile/adapters/nibss.go` — NIBSS-style settlement reader → canonical.
-- [ ] `internal/reconcile/adapters/csv.go` — generic CSV settlement reader → canonical.
-- [ ] Adapter unit tests (messy formats map cleanly; nothing downstream sees a raw row).
+- [x] `internal/reconcile/adapters/ledger.go` — read the ledger `ExportTransactions` output → `canonical.Record`. (Streaming JSONL `LedgerReader`: one `canonical.Record` per line via `json.Decoder`, `Next()` returns `io.EOF` at end — never buffers the file.)
+- [x] `internal/reconcile/adapters/nibss.go` — NIBSS-style settlement reader → canonical. (Fixed 7-column layout with a validated header; numeric NIBSS response codes (`00`/`09`/…) + English words mapped to `canonical.Status` via shared `parseStatus`.)
+- [x] `internal/reconcile/adapters/csv.go` — generic CSV settlement reader → canonical. (Header-name-driven `CSVReader`: tolerates column reorder + extra columns; only `reference`+`amount_minor` required.)
+- [x] Adapter unit tests (messy formats map cleanly; nothing downstream sees a raw row). (`adapters_test.go`: JSONL round-trip, NIBSS whitespace/status mapping, bad header + malformed amount rejected, generic-CSV reorder/extra-column/empty-status tolerance, `parseStatus` table. Sentinel errors `ErrMalformedRow`/`ErrMissingColumn`/`ErrUnknownStatus`.)
 
 ## NS-403 · Streaming matcher (FR-C2, FR-C7)
 - [ ] `internal/reconcile/matcher.go` — working index keyed by `reference`; match on exact `amount_minor` + `initiated_at` within the configurable window.
