@@ -15,8 +15,9 @@ import (
 )
 
 // stubService is an in-memory transfer.Service used only by these transport
-// tests: it validates the request, assigns an id, marks the transfer SETTLED,
-// and keeps it in memory so a POST followed by a GET round-trips. It never
+// tests: it validates the request, assigns an id, marks the transfer DEBITED
+// (the async 202 state), and keeps it in memory so a POST followed by a GET
+// round-trips. It never
 // touches the rail, the ledger, or Postgres — the HTTP edge is what's under test.
 type stubService struct {
 	mu    sync.Mutex
@@ -38,7 +39,7 @@ func (s *stubService) Create(_ context.Context, _ string, req transfer.CreateReq
 		Destination: req.Destination,
 		Amount:      req.Amount,
 		Currency:    req.Currency,
-		State:       transfer.StateSettled,
+		State:       transfer.StateDebited,
 	}
 	s.mu.Lock()
 	s.store[view.ID] = view
@@ -78,8 +79,8 @@ func withKey() map[string]string { return map[string]string{idempotencyHeader: "
 
 func TestCreateTransfer_Success(t *testing.T) {
 	rec := doRequest(t, newTestServer(), http.MethodPost, "/v1/transfers", validBody, withKey())
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202; body=%s", rec.Code, rec.Body.String())
 	}
 	var resp transferResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
@@ -88,8 +89,8 @@ func TestCreateTransfer_Success(t *testing.T) {
 	if resp.ID == "" {
 		t.Error("expected a non-empty transfer id")
 	}
-	if resp.State != string(transfer.StateSettled) {
-		t.Errorf("state = %q, want %q", resp.State, transfer.StateSettled)
+	if resp.State != string(transfer.StateDebited) {
+		t.Errorf("state = %q, want %q", resp.State, transfer.StateDebited)
 	}
 	if resp.AmountMinor.Minor() != 5000 {
 		t.Errorf("amount_minor = %d, want 5000", resp.AmountMinor.Minor())

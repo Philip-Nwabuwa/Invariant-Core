@@ -20,3 +20,25 @@ WHERE id = $1;
 -- name: GetTransferByID :one
 SELECT * FROM transactions
 WHERE id = $1;
+
+-- name: GetTransferForUpdate :one
+-- Lock the transfer row so a status advance (settle / reverse / callback) is
+-- serialized against any other driver or callback touching the same transfer.
+SELECT * FROM transactions
+WHERE id = $1
+FOR UPDATE;
+
+-- name: SetTransferStatusAndDebitLeg :exec
+-- Advance to 'debited' and record the debit leg's ledger transaction id (the
+-- reversal parent) in metadata, in one statement.
+UPDATE transactions
+SET status = sqlc.arg(status),
+    metadata = metadata || jsonb_build_object('debit_leg_tx_id', sqlc.arg(debit_leg_tx_id)::text)
+WHERE id = sqlc.arg(id);
+
+-- name: ListResumableTransfers :many
+-- Non-terminal transfers, for the recovery sweep (NS-306). Ordered oldest-first.
+SELECT * FROM transactions
+WHERE type = 'transfer'
+  AND status IN ('pending','debited','in_doubt','reversal_pending')
+ORDER BY initiated_at;

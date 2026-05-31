@@ -37,11 +37,11 @@ func dialRail(t *testing.T) mockrailv1.RailServiceClient {
 }
 
 // TestRailClient_Send proves the switch's Rail adapter talks to the real
-// mockrail server and treats a success verdict as a nil error.
+// mockrail server and maps a success reply to VerdictSuccess.
 func TestRailClient_Send(t *testing.T) {
 	rail := transfer.NewRailClient(dialRail(t))
 
-	err := rail.Send(context.Background(), transfer.Transfer{
+	verdict, err := rail.Send(context.Background(), transfer.Transfer{
 		Reference:   "ref-1",
 		Source:      "CUST-001",
 		Destination: "CUST-002",
@@ -50,5 +50,8 @@ func TestRailClient_Send(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("rail send: %v", err)
+	}
+	if verdict != transfer.VerdictSuccess {
+		t.Fatalf("verdict = %v, want VerdictSuccess", verdict)
 	}
 }

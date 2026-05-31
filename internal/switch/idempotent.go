@@ -54,6 +54,13 @@ func (s *IdempotentService) Create(ctx context.Context, key string, req CreateRe
 	case OutcomeInProgress:
 		return View{}, ErrInProgress
 	case OutcomeReplay:
+		// Under the async model the transfer keeps progressing after the first
+		// response was stored, so return its LIVE view rather than the stale
+		// stored JSON (DESIGN-NOTES §5). Fall back to the stored response only if
+		// the key has no transaction bound (e.g. it failed before posting).
+		if res.TransactionID != nil {
+			return s.inner.Get(ctx, res.TransactionID.String())
+		}
 		var view View
 		if err := json.Unmarshal(res.Response, &view); err != nil {
 			return View{}, err

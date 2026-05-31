@@ -232,11 +232,18 @@ type PostTransactionRequest struct {
 	// type is one of transfer | reversal | fee.
 	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
 	// status defaults to "pending" when empty.
-	Status        string            `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Entries       []*EntryInput     `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
-	Metadata      map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Status   string            `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	Entries  []*EntryInput     `protobuf:"bytes,4,rep,name=entries,proto3" json:"entries,omitempty"`
+	Metadata map[string]string `protobuf:"bytes,5,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// idempotency_key, when set, makes the post idempotent: re-posting the same
+	// key returns the existing transaction id instead of writing a duplicate
+	// (the switch keys each leg <transfer-id>:debit|settle|reversal). Optional.
+	IdempotencyKey string `protobuf:"bytes,6,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	// parent_transaction_id links a reversal to the transaction it compensates.
+	// Optional; set only for reversals.
+	ParentTransactionId string `protobuf:"bytes,7,opt,name=parent_transaction_id,json=parentTransactionId,proto3" json:"parent_transaction_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *PostTransactionRequest) Reset() {
@@ -302,6 +309,20 @@ func (x *PostTransactionRequest) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *PostTransactionRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+func (x *PostTransactionRequest) GetParentTransactionId() string {
+	if x != nil {
+		return x.ParentTransactionId
+	}
+	return ""
 }
 
 // PostTransactionResponse returns the new transaction id.
@@ -1050,13 +1071,15 @@ const file_ledger_v1_ledger_proto_rawDesc = "" +
 	"\faccount_code\x18\x01 \x01(\tR\vaccountCode\x122\n" +
 	"\tdirection\x18\x02 \x01(\x0e2\x14.ledger.v1.DirectionR\tdirection\x12!\n" +
 	"\famount_minor\x18\x03 \x01(\x03R\vamountMinor\x12\x1a\n" +
-	"\bcurrency\x18\x04 \x01(\tR\bcurrency\"\x9d\x02\n" +
+	"\bcurrency\x18\x04 \x01(\tR\bcurrency\"\xfa\x02\n" +
 	"\x16PostTransactionRequest\x12\x1c\n" +
 	"\treference\x18\x01 \x01(\tR\treference\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
 	"\x06status\x18\x03 \x01(\tR\x06status\x12/\n" +
 	"\aentries\x18\x04 \x03(\v2\x15.ledger.v1.EntryInputR\aentries\x12K\n" +
-	"\bmetadata\x18\x05 \x03(\v2/.ledger.v1.PostTransactionRequest.MetadataEntryR\bmetadata\x1a;\n" +
+	"\bmetadata\x18\x05 \x03(\v2/.ledger.v1.PostTransactionRequest.MetadataEntryR\bmetadata\x12'\n" +
+	"\x0fidempotency_key\x18\x06 \x01(\tR\x0eidempotencyKey\x122\n" +
+	"\x15parent_transaction_id\x18\a \x01(\tR\x13parentTransactionId\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"@\n" +

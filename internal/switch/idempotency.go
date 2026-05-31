@@ -39,12 +39,13 @@ const (
 	OutcomeInProgress
 )
 
-// ReserveResult is what Reserve returns. Response/Status are only meaningful for
-// OutcomeReplay.
+// ReserveResult is what Reserve returns. Response/Status/TransactionID are only
+// meaningful for OutcomeReplay (and TransactionID for in-progress takeover).
 type ReserveResult struct {
-	Outcome  Outcome
-	Response []byte
-	Status   string
+	Outcome       Outcome
+	Response      []byte
+	Status        string
+	TransactionID *uuid.UUID
 }
 
 // IdempotencyStore is the durable (Postgres) deduplication record. ADR-0003
@@ -88,9 +89,14 @@ func (s *IdempotencyStore) Reserve(ctx context.Context, key, fingerprint string)
 	}
 	switch existing.Status {
 	case IdemSucceeded, IdemFailed:
-		return ReserveResult{Outcome: OutcomeReplay, Response: existing.Response, Status: existing.Status}, nil
+		return ReserveResult{
+			Outcome:       OutcomeReplay,
+			Response:      existing.Response,
+			Status:        existing.Status,
+			TransactionID: existing.TransactionID,
+		}, nil
 	default: // in_progress
-		return ReserveResult{Outcome: OutcomeInProgress}, nil
+		return ReserveResult{Outcome: OutcomeInProgress, TransactionID: existing.TransactionID}, nil
 	}
 }
 

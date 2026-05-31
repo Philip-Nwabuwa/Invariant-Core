@@ -46,12 +46,23 @@ func (g *GRPCServer) PostTransaction(ctx context.Context, req *ledgerv1.PostTran
 		})
 	}
 
+	var parentID *uuid.UUID
+	if raw := req.GetParentTransactionId(); raw != "" {
+		pid, perr := uuid.Parse(raw)
+		if perr != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid parent_transaction_id: %v", perr)
+		}
+		parentID = &pid
+	}
+
 	txID, err := g.svc.PostTransaction(ctx, PostRequest{
-		Reference: req.GetReference(),
-		Type:      canonical.Type(req.GetType()),
-		Status:    canonical.Status(req.GetStatus()),
-		Entries:   entries,
-		Metadata:  req.GetMetadata(),
+		Reference:           req.GetReference(),
+		Type:                canonical.Type(req.GetType()),
+		Status:              canonical.Status(req.GetStatus()),
+		Entries:             entries,
+		Metadata:            req.GetMetadata(),
+		IdempotencyKey:      req.GetIdempotencyKey(),
+		ParentTransactionID: parentID,
 	})
 	if err != nil {
 		return nil, postErrToStatus(err)

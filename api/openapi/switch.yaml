@@ -1,11 +1,15 @@
 openapi: 3.0.3
 info:
   title: Invariant Core — Switch API
-  version: 0.2.0
+  version: 0.3.0
   description: >
     Public REST surface of the transfer engine (switchd). A transfer is created
     with a required Idempotency-Key header; retries with the same key are
-    deduplicated (NS-202). Amounts are integer minor units (kobo); 100 kobo = ₦1.
+    deduplicated. Processing is asynchronous: POST debits synchronously and
+    returns 202 Accepted at DEBITED, then settlement (or reversal) completes via
+    the transactional outbox — poll GET until a terminal state (SETTLED,
+    REVERSED, FAILED, or MANUAL_REVIEW). Amounts are integer minor units (kobo);
+    100 kobo = ₦1.
 servers:
   - url: http://localhost:8080
     description: Local dev
@@ -28,14 +32,12 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateTransferRequest"
       responses:
-        "201":
-          description: Transfer created and processed.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Transfer"
-        "200":
-          description: Idempotent replay — the stored result for an already-seen key.
+        "202":
+          description: >
+            Transfer accepted and debited; settlement completes asynchronously.
+            For a new key the body's state is typically DEBITED; for an idempotent
+            replay of an already-seen key it is the transfer's current (live)
+            state and no new work is done. Either way, poll GET until terminal.
           content:
             application/json:
               schema:
@@ -118,7 +120,7 @@ components:
           type: string
         state:
           type: string
-          enum: [INITIATED, DEBIT_PENDING, DEBITED, AWAITING_SETTLEMENT, SETTLED]
+          enum: [INITIATED, DEBIT_PENDING, DEBITED, AWAITING_SETTLEMENT, SETTLED, IN_DOUBT, REVERSAL_PENDING, REVERSED, MANUAL_REVIEW, FAILED]
     Error:
       type: object
       properties:

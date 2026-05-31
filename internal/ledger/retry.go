@@ -12,6 +12,11 @@ import (
 // transaction to preserve serializability (ADR-0002).
 const serializationFailureCode = "40001"
 
+// uniqueViolationCode is the SQLSTATE for a unique-constraint violation. It is
+// the opposite of a serialization failure: not transient, but a definitive
+// "already exists" — used to make idempotency-key re-posts a no-op.
+const uniqueViolationCode = "23505"
+
 const (
 	retryBaseBackoff = 5 * time.Millisecond
 	retryMaxBackoff  = 200 * time.Millisecond
@@ -50,6 +55,15 @@ func isSerializationFailure(err error) bool {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
 		return pgErr.Code == serializationFailureCode
+	}
+	return false
+}
+
+// isUniqueViolation reports whether err is (or wraps) a Postgres 23505.
+func isUniqueViolation(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == uniqueViolationCode
 	}
 	return false
 }

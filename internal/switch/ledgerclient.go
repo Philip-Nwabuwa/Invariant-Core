@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	ledgerv1 "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/ledger/v1"
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/canonical"
 )
@@ -15,9 +17,10 @@ import (
 const settlementAccount = "SETTLEMENT"
 
 // LedgerClient adapts the ledger gRPC client to the orchestrator's Ledger
-// interface. Each leg is its own balanced two-entry ledger transaction; both
-// carry the transfer's reference so reconcile can match them (ARCHITECTURE §3).
-// cmd/switchd dials the ledger and constructs one.
+// interface. Each leg is its own balanced two-entry ledger transaction carrying
+// a deterministic idempotency key (<transfer-id>:debit|settle), so a re-driven
+// leg returns the existing posting instead of moving money twice. Both carry the
+// transfer's reference so reconcile can match them (ARCHITECTURE §3).
 type LedgerClient struct {
 	client ledgerv1.LedgerServiceClient
 }
@@ -30,23 +33,31 @@ func NewLedgerClient(client ledgerv1.LedgerServiceClient) *LedgerClient {
 // LedgerClient implements Ledger — checked at compile time.
 var _ Ledger = (*LedgerClient)(nil)
 
-// PostDebitLeg debits the source and credits the settlement account.
-func (l *LedgerClient) PostDebitLeg(ctx context.Context, t Transfer) error {
-	return l.post(ctx, t, t.Source, settlementAccount)
+// PostDebitLeg debits the source and credits settlement, returning the ledger
+// transaction id (the reversal parent).
+func (l *LedgerClient) PostDebitLeg(ctx context.Context, t Transfer) (uuid.UUID, error) {
+	return l.post(ctx, t, t.Source, settlementAccount, legKey(t.ID, "debit"), canonical.TypeTransfer, nil)
 }
 
-// PostSettlementLeg debits the settlement account and credits the destination.
+// PostSettlementLeg debits settlement and credits the destination.
 func (l *LedgerClient) PostSettlementLeg(ctx context.Context, t Transfer) error {
-	return l.post(ctx, t, settlementAccount, t.Destination)
+	_, err := l.post(ctx, t, settlementAccount, t.Destination, legKey(t.ID, "settle"), canonical.TypeTransfer, nil)
+	return err
+}
+
+// legKey is the deterministic per-leg idempotency key.
+func legKey(transferID uuid.UUID, leg string) string {
+	return fmt.Sprintf("%s:%s", transferID, leg)
 }
 
 // post records one balanced transaction that debits debitAccount and credits
-// creditAccount for the transfer's amount.
-func (l *LedgerClient) post(ctx context.Context, t Transfer, debitAccount, creditAccount string) error {
-	_, err := l.client.PostTransaction(ctx, &ledgerv1.PostTransactionRequest{
-		Reference: t.Reference,
-		Type:      string(canonical.TypeTransfer),
-		Status:    string(canonical.StatusSettled),
+// creditAccount for the transfer's amount, under the given idempotency key.
+func (l *LedgerClient) post(ctx context.Context, t Transfer, debitAccount, creditAccount, idempotencyKey string, txType canonical.Type, parentTxID *uuid.UUID) (uuid.UUID, error) {
+	req := &ledgerv1.PostTransactionRequest{
+		Reference:      t.Reference,
+		Type:           string(txType),
+		Status:         string(canonical.StatusSettled),
+		IdempotencyKey: idempotencyKey,
 		Entries: []*ledgerv1.EntryInput{
 			{
 				AccountCode: debitAccount,
@@ -61,9 +72,17 @@ func (l *LedgerClient) post(ctx context.Context, t Transfer, debitAccount, credi
 				Currency:    t.Currency,
 			},
 		},
-	})
-	if err != nil {
-		return fmt.Errorf("ledger post %s->%s: %w", debitAccount, creditAccount, err)
 	}
-	return nil
+	if parentTxID != nil {
+		req.ParentTransactionId = parentTxID.String()
+	}
+	resp, err := l.client.PostTransaction(ctx, req)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("ledger post %s->%s: %w", debitAccount, creditAccount, err)
+	}
+	id, err := uuid.Parse(resp.GetTransactionId())
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("parse ledger tx id %q: %w", resp.GetTransactionId(), err)
+	}
+	return id, nil
 }

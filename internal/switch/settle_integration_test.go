@@ -11,25 +11,23 @@ import (
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/money"
 )
 
-// TestSettle_EndToEnd is the NS-205 acceptance test: the full switch stack
-// (IdempotentService -> Orchestrator -> real ledger over bufconn + a fake rail,
-// all over one Postgres) settles a transfer, and the durable idempotency
-// guarantees from the DoD hold:
+// TestSettle_EndToEnd exercises the full async switch stack (IdempotentService ->
+// Orchestrator -> Driver -> real ledger over bufconn + a success fake rail, all
+// over one Postgres). POST debits and returns 202/DEBITED; the outbox poller
+// settles; and the durable idempotency guarantees hold:
 //
-//   - a happy-path transfer settles and money moves through the ledger exactly once;
-//   - replaying the same Idempotency-Key returns the same transfer and creates no
-//     second transactions row;
-//   - reusing the key with a different body is a conflict (HTTP 409).
+//   - the transfer settles and money moves through the ledger exactly once;
+//   - replaying the same Idempotency-Key returns the same transfer's LIVE state
+//     and creates no second transactions row;
+//   - reusing the key with a different body is a conflict.
 func TestSettle_EndToEnd(t *testing.T) {
 	pool := testsupport.NewPool(t) // skips when Docker is unavailable
 	ctx := context.Background()
 
 	rawLedger := dialLedgerOn(t, pool)
-	orchestrator := transfer.NewOrchestrator(
-		transfer.NewPostgresStore(pool),
-		transfer.NewLedgerClient(rawLedger),
-		&fakeRail{},
-	)
+	store := transfer.NewPostgresStore(pool)
+	driver := transfer.NewDriver(store, transfer.NewLedgerClient(rawLedger), &fakeRail{verdict: transfer.VerdictSuccess})
+	orchestrator := transfer.NewOrchestrator(store, driver)
 	svc := transfer.NewIdempotentService(orchestrator, transfer.NewIdempotencyStore(pool))
 
 	req := transfer.CreateRequest{
@@ -41,16 +39,18 @@ func TestSettle_EndToEnd(t *testing.T) {
 	}
 	const key = "key-e2e"
 
-	// First call settles.
+	// First call debits synchronously (202/DEBITED), then the poller settles.
 	first, err := svc.Create(ctx, key, req)
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
-	if first.State != transfer.StateSettled {
-		t.Fatalf("state = %s, want SETTLED", first.State)
+	if first.State != transfer.StateDebited {
+		t.Fatalf("post-create state = %s, want DEBITED", first.State)
 	}
+	drainOutbox(t, store, driver)
 
-	// Replay: same key + same body returns the same transfer, no new work.
+	// Replay: same key + same body returns the same transfer's LIVE state (now
+	// SETTLED, not the stored DEBITED response) and does no new work.
 	replay, err := svc.Create(ctx, key, req)
 	if err != nil {
 		t.Fatalf("replay create: %v", err)
@@ -58,8 +58,12 @@ func TestSettle_EndToEnd(t *testing.T) {
 	if replay.ID != first.ID {
 		t.Errorf("replay id = %q, want %q (same transfer)", replay.ID, first.ID)
 	}
+	if replay.State != transfer.StateSettled {
+		t.Errorf("replay state = %s, want live SETTLED", replay.State)
+	}
 
-	// Exactly one transactions row exists for this key (DoD: no second transaction).
+	// Exactly one transactions row carries this customer key (DoD: no second
+	// transaction). The ledger legs use distinct <id>:debit/<id>:settle keys.
 	var count int
 	if err := pool.QueryRow(ctx,
 		"SELECT count(*) FROM transactions WHERE idempotency_key = $1", key,
@@ -70,8 +74,8 @@ func TestSettle_EndToEnd(t *testing.T) {
 		t.Errorf("transactions for key = %d, want 1", count)
 	}
 
-	// Money moved exactly once: SETTLEMENT nets to zero (credited then debited),
-	// source debited once, destination credited once.
+	// Money moved exactly once: SETTLEMENT nets to zero, source debited once,
+	// destination credited once.
 	for code, want := range map[string]int64{"CUST-001": 5000, "CUST-002": -5000, "SETTLEMENT": 0} {
 		bal, err := rawLedger.GetBalance(ctx, &ledgerv1.GetBalanceRequest{AccountCode: code})
 		if err != nil {

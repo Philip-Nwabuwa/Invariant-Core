@@ -109,7 +109,10 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writeError(w, statusFor(err), err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toResponse(view))
+	// 202 Accepted: the transfer is durably accepted and debited, but settlement
+	// completes asynchronously via the outbox. Clients poll GET until a terminal
+	// state (SETTLED / REVERSED / FAILED / MANUAL_REVIEW).
+	writeJSON(w, http.StatusAccepted, toResponse(view))
 }
 
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {

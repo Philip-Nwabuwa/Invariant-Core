@@ -1,6 +1,8 @@
 package ledger
 
 import (
+	"github.com/google/uuid"
+
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/canonical"
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/money"
 )
@@ -18,6 +20,12 @@ type PostRequest struct {
 	Entries []EntryInput
 	// Metadata is free-form context stored as JSONB.
 	Metadata map[string]string
+	// IdempotencyKey, when non-empty, dedupes the post: re-posting the same key
+	// returns the existing transaction id instead of writing a duplicate.
+	IdempotencyKey string
+	// ParentTransactionID links a reversal to the transaction it compensates.
+	// Nil for non-reversals.
+	ParentTransactionID *uuid.UUID
 }
 
 // totals returns the summed debit and credit magnitudes across the entries.

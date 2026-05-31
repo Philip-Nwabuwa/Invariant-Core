@@ -35,6 +35,31 @@ func (q *Queries) GetTransaction(ctx context.Context, id uuid.UUID) (Transaction
 	return i, err
 }
 
+const getTransactionByIdempotencyKey = `-- name: GetTransactionByIdempotencyKey :one
+SELECT id, reference, type, status, idempotency_key, parent_transaction_id, currency, initiated_at, settled_at, metadata FROM transactions
+WHERE idempotency_key = $1
+`
+
+// Resolve the transaction a leg's idempotency key already produced, so a
+// re-driven post becomes an idempotent no-op returning the existing id.
+func (q *Queries) GetTransactionByIdempotencyKey(ctx context.Context, idempotencyKey *string) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransactionByIdempotencyKey, idempotencyKey)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Reference,
+		&i.Type,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.ParentTransactionID,
+		&i.Currency,
+		&i.InitiatedAt,
+		&i.SettledAt,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const insertTransaction = `-- name: InsertTransaction :one
 INSERT INTO transactions (
     reference, type, status, idempotency_key, parent_transaction_id, currency, metadata

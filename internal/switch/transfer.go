@@ -19,7 +19,8 @@ import (
 type State string
 
 const (
-	// StateInitiated is the entry state before any side effect.
+	// StateInitiated is the entry state before any side effect (transient; never
+	// persisted — the row is created directly at DEBIT_PENDING).
 	StateInitiated State = "INITIATED"
 	// StateDebitPending is after the idempotency key is reserved and validated.
 	StateDebitPending State = "DEBIT_PENDING"
@@ -29,6 +30,19 @@ const (
 	StateAwaitingSettlement State = "AWAITING_SETTLEMENT"
 	// StateSettled is the happy-path terminal state.
 	StateSettled State = "SETTLED"
+	// StateInDoubt is reached when the rail outcome is unknown (timeout). It is
+	// resolved by a TSQ before any reversal — never reverse an unconfirmed item.
+	StateInDoubt State = "IN_DOUBT"
+	// StateReversalPending is reached on a rail decline or a TSQ-confirmed
+	// no-settlement; a compensating reversal is enqueued to restore the source.
+	StateReversalPending State = "REVERSAL_PENDING"
+	// StateReversed is the terminal state after the compensating entries post.
+	StateReversed State = "REVERSED"
+	// StateManualReview holds a transfer whose outcome could not be determined
+	// (e.g. the TSQ itself kept timing out) for an operator to resolve.
+	StateManualReview State = "MANUAL_REVIEW"
+	// StateFailed is terminal: the transfer was rejected before any money moved.
+	StateFailed State = "FAILED"
 )
 
 // Supported currencies (NGN-only in v1, matching pkg/money).

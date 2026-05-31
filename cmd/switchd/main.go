@@ -21,6 +21,7 @@ import (
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/ledger/postgres"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/serviceboot"
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
+	"github.com/Philip-Nwabuwa/Invariant-Core/internal/switch/outbox"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/switch/transport"
 	"github.com/Philip-Nwabuwa/Invariant-Core/pkg/logging"
 )
@@ -58,9 +59,18 @@ func main() {
 	ledgerClient := transfer.NewLedgerClient(ledgerv1.NewLedgerServiceClient(ledgerConn))
 	railClient := transfer.NewRailClient(mockrailv1.NewRailServiceClient(railConn))
 
-	orchestrator := transfer.NewOrchestrator(transfer.NewPostgresStore(pool), ledgerClient, railClient)
+	store := transfer.NewPostgresStore(pool)
+	driver := transfer.NewDriver(store, ledgerClient, railClient)
+	orchestrator := transfer.NewOrchestrator(store, driver)
 	svc := transfer.NewIdempotentService(orchestrator, transfer.NewIdempotencyStore(pool))
 	handler := transport.NewHandler(svc)
+
+	// The outbox poller drives every post-debit step (rail, settlement, reversal)
+	// asynchronously, so a crash mid-flow resumes from the durable event log
+	// rather than losing the work. It runs until shutdown cancels pollCtx.
+	pollCtx, stopPoller := context.WithCancel(context.Background())
+	poller := outbox.NewPoller(store.Queries(), driver, outbox.Config{})
+	go poller.Run(pollCtx)
 
 	if err := serviceboot.Run(serviceboot.Options{
 		ServiceName: "switchd",
@@ -74,6 +84,7 @@ func main() {
 			mux.Handle("/", otelhttp.NewHandler(handler.Routes(), "switchd.rest"))
 		},
 		Cleanup: func() {
+			stopPoller()
 			_ = ledgerConn.Close()
 			_ = railConn.Close()
 			pool.Close()

@@ -58,6 +58,13 @@ message PostTransactionRequest {
   string status = 3;
   repeated EntryInput entries = 4;
   map<string, string> metadata = 5;
+  // idempotency_key, when set, makes the post idempotent: re-posting the same
+  // key returns the existing transaction id instead of writing a duplicate
+  // (the switch keys each leg <transfer-id>:debit|settle|reversal). Optional.
+  string idempotency_key = 6;
+  // parent_transaction_id links a reversal to the transaction it compensates.
+  // Optional; set only for reversals.
+  string parent_transaction_id = 7;
 }
 
 // PostTransactionResponse returns the new transaction id.

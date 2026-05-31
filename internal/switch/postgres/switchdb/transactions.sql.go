@@ -34,6 +34,32 @@ func (q *Queries) GetTransferByID(ctx context.Context, id uuid.UUID) (Transactio
 	return i, err
 }
 
+const getTransferForUpdate = `-- name: GetTransferForUpdate :one
+SELECT id, reference, type, status, idempotency_key, parent_transaction_id, currency, initiated_at, settled_at, metadata FROM transactions
+WHERE id = $1
+FOR UPDATE
+`
+
+// Lock the transfer row so a status advance (settle / reverse / callback) is
+// serialized against any other driver or callback touching the same transfer.
+func (q *Queries) GetTransferForUpdate(ctx context.Context, id uuid.UUID) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransferForUpdate, id)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Reference,
+		&i.Type,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.ParentTransactionID,
+		&i.Currency,
+		&i.InitiatedAt,
+		&i.SettledAt,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const insertTransfer = `-- name: InsertTransfer :one
 INSERT INTO transactions (reference, type, status, idempotency_key, currency, metadata)
 VALUES ($1, 'transfer', $2, $3, $4, $5)
@@ -76,6 +102,45 @@ func (q *Queries) InsertTransfer(ctx context.Context, arg InsertTransferParams) 
 	return i, err
 }
 
+const listResumableTransfers = `-- name: ListResumableTransfers :many
+SELECT id, reference, type, status, idempotency_key, parent_transaction_id, currency, initiated_at, settled_at, metadata FROM transactions
+WHERE type = 'transfer'
+  AND status IN ('pending','debited','in_doubt','reversal_pending')
+ORDER BY initiated_at
+`
+
+// Non-terminal transfers, for the recovery sweep (NS-306). Ordered oldest-first.
+func (q *Queries) ListResumableTransfers(ctx context.Context) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listResumableTransfers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Transaction
+	for rows.Next() {
+		var i Transaction
+		if err := rows.Scan(
+			&i.ID,
+			&i.Reference,
+			&i.Type,
+			&i.Status,
+			&i.IdempotencyKey,
+			&i.ParentTransactionID,
+			&i.Currency,
+			&i.InitiatedAt,
+			&i.SettledAt,
+			&i.Metadata,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setTransferSettled = `-- name: SetTransferSettled :exec
 UPDATE transactions
 SET status = 'settled', settled_at = now()
@@ -100,5 +165,25 @@ type SetTransferStatusParams struct {
 
 func (q *Queries) SetTransferStatus(ctx context.Context, arg SetTransferStatusParams) error {
 	_, err := q.db.Exec(ctx, setTransferStatus, arg.ID, arg.Status)
+	return err
+}
+
+const setTransferStatusAndDebitLeg = `-- name: SetTransferStatusAndDebitLeg :exec
+UPDATE transactions
+SET status = $1,
+    metadata = metadata || jsonb_build_object('debit_leg_tx_id', $2::text)
+WHERE id = $3
+`
+
+type SetTransferStatusAndDebitLegParams struct {
+	Status       string    `json:"status"`
+	DebitLegTxID string    `json:"debit_leg_tx_id"`
+	ID           uuid.UUID `json:"id"`
+}
+
+// Advance to 'debited' and record the debit leg's ledger transaction id (the
+// reversal parent) in metadata, in one statement.
+func (q *Queries) SetTransferStatusAndDebitLeg(ctx context.Context, arg SetTransferStatusAndDebitLegParams) error {
+	_, err := q.db.Exec(ctx, setTransferStatusAndDebitLeg, arg.Status, arg.DebitLegTxID, arg.ID)
 	return err
 }

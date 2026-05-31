@@ -108,6 +108,47 @@ func TestPostTransaction_BalancedSucceeds(t *testing.T) {
 	}
 }
 
+// TestPostTransaction_IdempotencyKeyNoOp proves a re-driven post under the same
+// idempotency key returns the existing transaction and writes no duplicate — the
+// mechanism that makes the switch's debit/settle/reversal legs safe to re-drive.
+func TestPostTransaction_IdempotencyKeyNoOp(t *testing.T) {
+	svc, repo := newService(t)
+	ctx := context.Background()
+
+	req := PostRequest{
+		Reference:      "REF-IDEM",
+		Type:           canonical.TypeTransfer,
+		Status:         canonical.StatusSettled,
+		IdempotencyKey: "txn-1:debit",
+		Entries: []EntryInput{
+			entry("CUST-001", Debit, 5000),
+			entry("SETTLEMENT", Credit, 5000),
+		},
+	}
+
+	first, err := svc.PostTransaction(ctx, req)
+	if err != nil {
+		t.Fatalf("first post: %v", err)
+	}
+	second, err := svc.PostTransaction(ctx, req)
+	if err != nil {
+		t.Fatalf("second (re-driven) post: %v", err)
+	}
+	if first != second {
+		t.Fatalf("re-driven post returned %s, want existing %s", second, first)
+	}
+
+	var count int
+	if err := repo.Pool().QueryRow(ctx,
+		`SELECT count(*) FROM transactions WHERE idempotency_key = $1`, "txn-1:debit").
+		Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("transactions under key = %d, want 1 (no duplicate)", count)
+	}
+}
+
 func TestPostTransaction_UnknownAccount(t *testing.T) {
 	svc, _ := newService(t)
 

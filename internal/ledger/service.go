@@ -64,6 +64,11 @@ func (s *Service) PostTransaction(ctx context.Context, req PostRequest) (uuid.UU
 		status = string(canonical.StatusPending)
 	}
 
+	var idemKey *string
+	if req.IdempotencyKey != "" {
+		idemKey = &req.IdempotencyKey
+	}
+
 	var txID uuid.UUID
 	err = retryOnSerialization(ctx, maxSerializationRetries, func() error {
 		return s.repo.WithSerializableTx(ctx, func(q *ledgerdb.Queries) error {
@@ -73,11 +78,13 @@ func (s *Service) PostTransaction(ctx context.Context, req PostRequest) (uuid.UU
 			}
 
 			tx, err := q.InsertTransaction(ctx, ledgerdb.InsertTransactionParams{
-				Reference: req.Reference,
-				Type:      string(req.Type),
-				Status:    status,
-				Currency:  currency,
-				Metadata:  metadata,
+				Reference:           req.Reference,
+				Type:                string(req.Type),
+				Status:              status,
+				IdempotencyKey:      idemKey,
+				ParentTransactionID: req.ParentTransactionID,
+				Currency:            currency,
+				Metadata:            metadata,
 			})
 			if err != nil {
 				return fmt.Errorf("insert transaction: %w", err)
@@ -104,6 +111,16 @@ func (s *Service) PostTransaction(ctx context.Context, req PostRequest) (uuid.UU
 		})
 	})
 	if err != nil {
+		// A unique-constraint violation means this leg was already posted under
+		// the same idempotency key (a re-drive): resolve and return the existing
+		// transaction so the post is an idempotent no-op. This is distinct from a
+		// 40001 serialization failure, which retryOnSerialization already retried.
+		if isUniqueViolation(err) && idemKey != nil {
+			existing, lookupErr := s.repo.Queries().GetTransactionByIdempotencyKey(ctx, idemKey)
+			if lookupErr == nil {
+				return existing.ID, nil
+			}
+		}
 		return uuid.Nil, err
 	}
 	return txID, nil

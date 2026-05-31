@@ -74,7 +74,7 @@ func TestLedgerClient_BothLegsMoveMoneyOnce(t *testing.T) {
 		Currency:    "NGN",
 	}
 
-	if err := led.PostDebitLeg(ctx, tr); err != nil {
+	if _, err := led.PostDebitLeg(ctx, tr); err != nil {
 		t.Fatalf("PostDebitLeg: %v", err)
 	}
 	if err := led.PostSettlementLeg(ctx, tr); err != nil {
