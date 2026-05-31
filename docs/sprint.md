@@ -198,8 +198,8 @@ Source of truth for Sprint 3 progress. Same rule: implement → verify → tick 
 - [x] `REVERSAL_PENDING → REVERSED` once the compensating entries post (via NS-302). (Integration tests: TSQ-settled completes settlement with **source not refunded, destination credited**; TSQ-no-settlement reverses; inconclusive holds in MANUAL_REVIEW with money in suspense.)
 
 ## NS-304 · Idempotent duplicate rail callbacks (FR-T5)
-- [ ] `internal/switch/grpc.go` — switch gRPC rail-callback intake; a second "success" for an already-terminal transfer is a no-op (terminal-state guard).
-- [ ] Test: a duplicate callback changes nothing.
+- [x] `internal/switch/grpc.go` — switch gRPC `RailCallback` intake on `:50052` (registered via `serviceboot.RegisterGRPC`); a second "success" for an already-terminal transfer is a no-op. Two guards close the duplicate/poller race: the row-locked transition methods no-op once terminal, and the `<id>:settle` per-leg key means even concurrent settlements post one leg. (Looks up the lifecycle row by reference via `metadata ? 'source'`.)
+- [x] Test: a duplicate callback changes nothing. (`TestRailCallback_DuplicateIsNoOp` over real gRPC/bufconn: SUCCESS settles, the duplicate leaves one settlement leg + balances unchanged; unknown reference → NotFound.)
 
 ## NS-305 · `mockrail` chaos (ARCHITECTURE §2.3)
 - [ ] Env-seeded probabilities: added latency, hard timeout (no response), duplicate-success callback, explicit decline.

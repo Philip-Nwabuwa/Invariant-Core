@@ -144,6 +144,18 @@ func (s *PostgresStore) load(ctx context.Context, id uuid.UUID) (transferDetail,
 	return detailFromRow(tx), nil
 }
 
+// loadByReference returns the lifecycle transfer for a reference, or ErrNotFound.
+func (s *PostgresStore) loadByReference(ctx context.Context, reference string) (transferDetail, error) {
+	tx, err := s.q.GetTransferByReference(ctx, reference)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return transferDetail{}, ErrNotFound
+		}
+		return transferDetail{}, fmt.Errorf("get transfer by reference: %w", err)
+	}
+	return detailFromRow(tx), nil
+}
+
 func detailFromRow(tx switchdb.Transaction) transferDetail {
 	var meta transferMeta
 	if len(tx.Metadata) > 0 {

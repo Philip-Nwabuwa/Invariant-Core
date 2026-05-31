@@ -4,12 +4,14 @@ package switch.v1;
 
 option go_package = "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1";
 
-// SwitchService is the internal gRPC surface of the transfer engine. Sprint 0
-// defines only a health Ping; rail-callback intake and the corrective endpoint
-// are added in Sprints 2-3.
+// SwitchService is the internal gRPC surface of the transfer engine.
 service SwitchService {
   // Ping is a liveness check used while the real surface is being built.
   rpc Ping(PingRequest) returns (PingResponse);
+  // RailCallback receives the rail's asynchronous outcome for a transfer. It is
+  // idempotent: a duplicate callback for an already-terminal transfer is a
+  // no-op (terminal-state guard), so the rail can safely deliver more than once.
+  rpc RailCallback(RailCallbackRequest) returns (RailCallbackResponse);
 }
 
 // PingRequest is an empty liveness request.
@@ -19,4 +21,23 @@ message PingRequest {}
 message PingResponse {
   // ok is true when the service is serving.
   bool ok = 1;
+}
+
+// CallbackStatus is the rail's reported outcome for a transfer.
+enum CallbackStatus {
+  CALLBACK_STATUS_UNSPECIFIED = 0;
+  CALLBACK_STATUS_SUCCESS = 1;
+  CALLBACK_STATUS_DECLINED = 2;
+}
+
+// RailCallbackRequest identifies the transfer by its reference and reports the
+// rail's settlement outcome.
+message RailCallbackRequest {
+  string reference = 1;
+  CallbackStatus status = 2;
+}
+
+// RailCallbackResponse reports the transfer's state after the callback applied.
+message RailCallbackResponse {
+  string state = 1;
 }

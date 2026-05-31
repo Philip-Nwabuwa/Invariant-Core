@@ -18,6 +18,7 @@ import (
 
 	ledgerv1 "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/ledger/v1"
 	mockrailv1 "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/mockrail/v1"
+	switchv1 "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/ledger/postgres"
 	"github.com/Philip-Nwabuwa/Invariant-Core/internal/serviceboot"
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
@@ -72,10 +73,16 @@ func main() {
 	poller := outbox.NewPoller(store.Queries(), driver, outbox.Config{})
 	go poller.Run(pollCtx)
 
+	grpcServer := transfer.NewGRPCServer(driver)
+
 	if err := serviceboot.Run(serviceboot.Options{
 		ServiceName: "switchd",
 		HealthAddr:  serviceboot.EnvOr("SWITCHD_HTTP_ADDR", ":8080"),
 		GRPCAddr:    serviceboot.EnvOr("SWITCHD_GRPC_ADDR", ":50052"),
+		// The internal gRPC surface receives rail callbacks (idempotent intake).
+		RegisterGRPC: func(srv *grpc.Server) {
+			switchv1.RegisterSwitchServiceServer(srv, grpcServer)
+		},
 		// Mount the REST router at "/"; the more specific /healthz and /metrics
 		// patterns registered by serviceboot still take precedence. otelhttp
 		// starts the root server span for each transfer request, which the

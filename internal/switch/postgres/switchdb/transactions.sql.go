@@ -34,6 +34,34 @@ func (q *Queries) GetTransferByID(ctx context.Context, id uuid.UUID) (Transactio
 	return i, err
 }
 
+const getTransferByReference = `-- name: GetTransferByReference :one
+SELECT id, reference, type, status, idempotency_key, parent_transaction_id, currency, initiated_at, settled_at, metadata FROM transactions
+WHERE reference = $1 AND metadata ? 'source'
+ORDER BY initiated_at DESC
+LIMIT 1
+`
+
+// Find the switch's lifecycle transfer row for a reference. The `metadata ?
+// 'source'` predicate selects the lifecycle row (which carries source/dest/
+// amount) over the ledger legs that share the reference but have empty metadata.
+func (q *Queries) GetTransferByReference(ctx context.Context, reference string) (Transaction, error) {
+	row := q.db.QueryRow(ctx, getTransferByReference, reference)
+	var i Transaction
+	err := row.Scan(
+		&i.ID,
+		&i.Reference,
+		&i.Type,
+		&i.Status,
+		&i.IdempotencyKey,
+		&i.ParentTransactionID,
+		&i.Currency,
+		&i.InitiatedAt,
+		&i.SettledAt,
+		&i.Metadata,
+	)
+	return i, err
+}
+
 const getTransferForUpdate = `-- name: GetTransferForUpdate :one
 SELECT id, reference, type, status, idempotency_key, parent_transaction_id, currency, initiated_at, settled_at, metadata FROM transactions
 WHERE id = $1

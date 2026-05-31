@@ -235,6 +235,44 @@ func (d *Driver) handleReversal(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
+// HandleRailCallback applies the rail's asynchronous outcome for a transfer
+// (looked up by reference). It is idempotent: the transition methods lock the
+// row and no-op if the transfer is already terminal, and the settlement leg is
+// keyed, so a duplicate callback — even racing the poller's own settlement —
+// can never post a second leg or change a terminal transfer. Returns the
+// resulting state for the response.
+func (d *Driver) HandleRailCallback(ctx context.Context, reference string, verdict RailVerdict) (State, error) {
+	det, err := d.store.loadByReference(ctx, reference)
+	if err != nil {
+		return "", err
+	}
+	switch verdict {
+	case VerdictSuccess:
+		// Settle (idempotent leg). markSettled no-ops if already terminal.
+		if !isTerminalStatus(det.Status) {
+			if err := d.ledger.PostSettlementLeg(ctx, det.transfer()); err != nil {
+				return "", fmt.Errorf("post settlement leg: %w", err)
+			}
+		}
+		if _, err := d.store.markSettled(ctx, det.ID); err != nil {
+			return "", err
+		}
+	case VerdictDeclined:
+		if _, err := d.store.markReversalPending(ctx, det.ID, det.eventPayload()); err != nil {
+			return "", err
+		}
+	default:
+		// An UNSPECIFIED callback carries no decision; leave the transfer for the
+		// in-doubt/TSQ path rather than acting on a non-answer.
+	}
+
+	cur, err := d.store.load(ctx, det.ID)
+	if err != nil {
+		return "", err
+	}
+	return stateForStatus(cur.Status), nil
+}
+
 // transferEventPayload is the JSON body of a transfer outbox event. The handler
 // re-loads the row for the authoritative status, so the payload is informational
 // (and useful for debugging the outbox).

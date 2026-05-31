@@ -19,19 +19,22 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SwitchService_Ping_FullMethodName = "/switch.v1.SwitchService/Ping"
+	SwitchService_Ping_FullMethodName         = "/switch.v1.SwitchService/Ping"
+	SwitchService_RailCallback_FullMethodName = "/switch.v1.SwitchService/RailCallback"
 )
 
 // SwitchServiceClient is the client API for SwitchService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
-// SwitchService is the internal gRPC surface of the transfer engine. Sprint 0
-// defines only a health Ping; rail-callback intake and the corrective endpoint
-// are added in Sprints 2-3.
+// SwitchService is the internal gRPC surface of the transfer engine.
 type SwitchServiceClient interface {
 	// Ping is a liveness check used while the real surface is being built.
 	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
+	// RailCallback receives the rail's asynchronous outcome for a transfer. It is
+	// idempotent: a duplicate callback for an already-terminal transfer is a
+	// no-op (terminal-state guard), so the rail can safely deliver more than once.
+	RailCallback(ctx context.Context, in *RailCallbackRequest, opts ...grpc.CallOption) (*RailCallbackResponse, error)
 }
 
 type switchServiceClient struct {
@@ -52,16 +55,28 @@ func (c *switchServiceClient) Ping(ctx context.Context, in *PingRequest, opts ..
 	return out, nil
 }
 
+func (c *switchServiceClient) RailCallback(ctx context.Context, in *RailCallbackRequest, opts ...grpc.CallOption) (*RailCallbackResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RailCallbackResponse)
+	err := c.cc.Invoke(ctx, SwitchService_RailCallback_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SwitchServiceServer is the server API for SwitchService service.
 // All implementations must embed UnimplementedSwitchServiceServer
 // for forward compatibility.
 //
-// SwitchService is the internal gRPC surface of the transfer engine. Sprint 0
-// defines only a health Ping; rail-callback intake and the corrective endpoint
-// are added in Sprints 2-3.
+// SwitchService is the internal gRPC surface of the transfer engine.
 type SwitchServiceServer interface {
 	// Ping is a liveness check used while the real surface is being built.
 	Ping(context.Context, *PingRequest) (*PingResponse, error)
+	// RailCallback receives the rail's asynchronous outcome for a transfer. It is
+	// idempotent: a duplicate callback for an already-terminal transfer is a
+	// no-op (terminal-state guard), so the rail can safely deliver more than once.
+	RailCallback(context.Context, *RailCallbackRequest) (*RailCallbackResponse, error)
 	mustEmbedUnimplementedSwitchServiceServer()
 }
 
@@ -74,6 +89,9 @@ type UnimplementedSwitchServiceServer struct{}
 
 func (UnimplementedSwitchServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Ping not implemented")
+}
+func (UnimplementedSwitchServiceServer) RailCallback(context.Context, *RailCallbackRequest) (*RailCallbackResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RailCallback not implemented")
 }
 func (UnimplementedSwitchServiceServer) mustEmbedUnimplementedSwitchServiceServer() {}
 func (UnimplementedSwitchServiceServer) testEmbeddedByValue()                       {}
@@ -114,6 +132,24 @@ func _SwitchService_Ping_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SwitchService_RailCallback_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RailCallbackRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SwitchServiceServer).RailCallback(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SwitchService_RailCallback_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SwitchServiceServer).RailCallback(ctx, req.(*RailCallbackRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SwitchService_ServiceDesc is the grpc.ServiceDesc for SwitchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -124,6 +160,10 @@ var SwitchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Ping",
 			Handler:    _SwitchService_Ping_Handler,
+		},
+		{
+			MethodName: "RailCallback",
+			Handler:    _SwitchService_RailCallback_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

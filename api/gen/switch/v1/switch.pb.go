@@ -21,6 +21,56 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// CallbackStatus is the rail's reported outcome for a transfer.
+type CallbackStatus int32
+
+const (
+	CallbackStatus_CALLBACK_STATUS_UNSPECIFIED CallbackStatus = 0
+	CallbackStatus_CALLBACK_STATUS_SUCCESS     CallbackStatus = 1
+	CallbackStatus_CALLBACK_STATUS_DECLINED    CallbackStatus = 2
+)
+
+// Enum value maps for CallbackStatus.
+var (
+	CallbackStatus_name = map[int32]string{
+		0: "CALLBACK_STATUS_UNSPECIFIED",
+		1: "CALLBACK_STATUS_SUCCESS",
+		2: "CALLBACK_STATUS_DECLINED",
+	}
+	CallbackStatus_value = map[string]int32{
+		"CALLBACK_STATUS_UNSPECIFIED": 0,
+		"CALLBACK_STATUS_SUCCESS":     1,
+		"CALLBACK_STATUS_DECLINED":    2,
+	}
+)
+
+func (x CallbackStatus) Enum() *CallbackStatus {
+	p := new(CallbackStatus)
+	*p = x
+	return p
+}
+
+func (x CallbackStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CallbackStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_switch_v1_switch_proto_enumTypes[0].Descriptor()
+}
+
+func (CallbackStatus) Type() protoreflect.EnumType {
+	return &file_switch_v1_switch_proto_enumTypes[0]
+}
+
+func (x CallbackStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CallbackStatus.Descriptor instead.
+func (CallbackStatus) EnumDescriptor() ([]byte, []int) {
+	return file_switch_v1_switch_proto_rawDescGZIP(), []int{0}
+}
+
 // PingRequest is an empty liveness request.
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -104,6 +154,105 @@ func (x *PingResponse) GetOk() bool {
 	return false
 }
 
+// RailCallbackRequest identifies the transfer by its reference and reports the
+// rail's settlement outcome.
+type RailCallbackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reference     string                 `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
+	Status        CallbackStatus         `protobuf:"varint,2,opt,name=status,proto3,enum=switch.v1.CallbackStatus" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RailCallbackRequest) Reset() {
+	*x = RailCallbackRequest{}
+	mi := &file_switch_v1_switch_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RailCallbackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RailCallbackRequest) ProtoMessage() {}
+
+func (x *RailCallbackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_switch_v1_switch_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RailCallbackRequest.ProtoReflect.Descriptor instead.
+func (*RailCallbackRequest) Descriptor() ([]byte, []int) {
+	return file_switch_v1_switch_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RailCallbackRequest) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
+func (x *RailCallbackRequest) GetStatus() CallbackStatus {
+	if x != nil {
+		return x.Status
+	}
+	return CallbackStatus_CALLBACK_STATUS_UNSPECIFIED
+}
+
+// RailCallbackResponse reports the transfer's state after the callback applied.
+type RailCallbackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RailCallbackResponse) Reset() {
+	*x = RailCallbackResponse{}
+	mi := &file_switch_v1_switch_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RailCallbackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RailCallbackResponse) ProtoMessage() {}
+
+func (x *RailCallbackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_switch_v1_switch_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RailCallbackResponse.ProtoReflect.Descriptor instead.
+func (*RailCallbackResponse) Descriptor() ([]byte, []int) {
+	return file_switch_v1_switch_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RailCallbackResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
 var File_switch_v1_switch_proto protoreflect.FileDescriptor
 
 const file_switch_v1_switch_proto_rawDesc = "" +
@@ -111,9 +260,19 @@ const file_switch_v1_switch_proto_rawDesc = "" +
 	"\x16switch/v1/switch.proto\x12\tswitch.v1\"\r\n" +
 	"\vPingRequest\"\x1e\n" +
 	"\fPingResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2H\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\"f\n" +
+	"\x13RailCallbackRequest\x12\x1c\n" +
+	"\treference\x18\x01 \x01(\tR\treference\x121\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x19.switch.v1.CallbackStatusR\x06status\",\n" +
+	"\x14RailCallbackResponse\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state*l\n" +
+	"\x0eCallbackStatus\x12\x1f\n" +
+	"\x1bCALLBACK_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17CALLBACK_STATUS_SUCCESS\x10\x01\x12\x1c\n" +
+	"\x18CALLBACK_STATUS_DECLINED\x10\x022\x99\x01\n" +
 	"\rSwitchService\x127\n" +
-	"\x04Ping\x12\x16.switch.v1.PingRequest\x1a\x17.switch.v1.PingResponseBEZCgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1b\x06proto3"
+	"\x04Ping\x12\x16.switch.v1.PingRequest\x1a\x17.switch.v1.PingResponse\x12O\n" +
+	"\fRailCallback\x12\x1e.switch.v1.RailCallbackRequest\x1a\x1f.switch.v1.RailCallbackResponseBEZCgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1b\x06proto3"
 
 var (
 	file_switch_v1_switch_proto_rawDescOnce sync.Once
@@ -127,19 +286,26 @@ func file_switch_v1_switch_proto_rawDescGZIP() []byte {
 	return file_switch_v1_switch_proto_rawDescData
 }
 
-var file_switch_v1_switch_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_switch_v1_switch_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_switch_v1_switch_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_switch_v1_switch_proto_goTypes = []any{
-	(*PingRequest)(nil),  // 0: switch.v1.PingRequest
-	(*PingResponse)(nil), // 1: switch.v1.PingResponse
+	(CallbackStatus)(0),          // 0: switch.v1.CallbackStatus
+	(*PingRequest)(nil),          // 1: switch.v1.PingRequest
+	(*PingResponse)(nil),         // 2: switch.v1.PingResponse
+	(*RailCallbackRequest)(nil),  // 3: switch.v1.RailCallbackRequest
+	(*RailCallbackResponse)(nil), // 4: switch.v1.RailCallbackResponse
 }
 var file_switch_v1_switch_proto_depIdxs = []int32{
-	0, // 0: switch.v1.SwitchService.Ping:input_type -> switch.v1.PingRequest
-	1, // 1: switch.v1.SwitchService.Ping:output_type -> switch.v1.PingResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: switch.v1.RailCallbackRequest.status:type_name -> switch.v1.CallbackStatus
+	1, // 1: switch.v1.SwitchService.Ping:input_type -> switch.v1.PingRequest
+	3, // 2: switch.v1.SwitchService.RailCallback:input_type -> switch.v1.RailCallbackRequest
+	2, // 3: switch.v1.SwitchService.Ping:output_type -> switch.v1.PingResponse
+	4, // 4: switch.v1.SwitchService.RailCallback:output_type -> switch.v1.RailCallbackResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_switch_v1_switch_proto_init() }
@@ -152,13 +318,14 @@ func file_switch_v1_switch_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_switch_v1_switch_proto_rawDesc), len(file_switch_v1_switch_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   2,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_switch_v1_switch_proto_goTypes,
 		DependencyIndexes: file_switch_v1_switch_proto_depIdxs,
+		EnumInfos:         file_switch_v1_switch_proto_enumTypes,
 		MessageInfos:      file_switch_v1_switch_proto_msgTypes,
 	}.Build()
 	File_switch_v1_switch_proto = out.File

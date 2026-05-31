@@ -36,6 +36,15 @@ SET status = sqlc.arg(status),
     metadata = metadata || jsonb_build_object('debit_leg_tx_id', sqlc.arg(debit_leg_tx_id)::text)
 WHERE id = sqlc.arg(id);
 
+-- name: GetTransferByReference :one
+-- Find the switch's lifecycle transfer row for a reference. The `metadata ?
+-- 'source'` predicate selects the lifecycle row (which carries source/dest/
+-- amount) over the ledger legs that share the reference but have empty metadata.
+SELECT * FROM transactions
+WHERE reference = $1 AND metadata ? 'source'
+ORDER BY initiated_at DESC
+LIMIT 1;
+
 -- name: ListResumableTransfers :many
 -- Non-terminal transfers, for the recovery sweep (NS-306). Ordered oldest-first.
 SELECT * FROM transactions
