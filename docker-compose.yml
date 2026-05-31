@@ -1,8 +1,8 @@
 services:
   postgres:
-    # Pinned to 16 to match the testcontainers test harness and the local data
-    # volume; the engine version must be consistent across dev, test, and CI.
-    image: postgres:16-alpine
+    # Pinned to match the testcontainers test harness; the engine version must
+    # be consistent across dev, test, and CI.
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: invariantcore
       POSTGRES_PASSWORD: invariantcore

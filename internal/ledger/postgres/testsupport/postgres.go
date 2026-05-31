@@ -29,7 +29,7 @@ func NewPool(t *testing.T) *pgxpool.Pool {
 	ctx := context.Background()
 
 	ctr, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"postgres:17-alpine",
 		postgres.WithDatabase("invariantcore"),
 		postgres.WithUsername("invariantcore"),
 		postgres.WithPassword("invariantcore"),
