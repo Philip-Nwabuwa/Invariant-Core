@@ -138,10 +138,10 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 - [x] Wire the router into `cmd/switchd` alongside `/healthz` (via `serviceboot`). (Added `Options.RegisterHTTP` hook → `health.NewServer` register callback; REST mounted at `/`, `/healthz`+`/metrics` still take precedence.)
 
 ## NS-202 · Durable idempotency store (FR-T2, ADR-0003)
-- [ ] `internal/switch/idempotency.go` — reserve the key (`status=in_progress`, store `request_fingerprint`) in `idempotency_keys`; on completion store `response` + `transaction_id` + `status`.
-- [ ] Redis fast-path: check/set the key in Redis; a miss falls through to Postgres (the durable record of truth).
-- [ ] Replay of a completed key returns the **stored** result; same key + different fingerprint → `409 Conflict`.
-- [ ] Tests: first call processes; replay returns the stored result; concurrent `in_progress` handled.
+- [x] `internal/switch/idempotency.go` — reserve the key (`status=in_progress`, store `request_fingerprint`) in `idempotency_keys`; on completion store `response` + `transaction_id` + `status`. (`IdempotencyStore.Reserve` → `Outcome` {Reserved/Replay/Conflict/InProgress} via `INSERT … ON CONFLICT DO NOTHING`; `Complete`; `Fingerprint(req)` = SHA-256 of canonical body. 2nd sqlc block → `internal/switch/postgres/switchdb`.)
+- [ ] Redis fast-path: check/set the key in Redis; a miss falls through to Postgres (the durable record of truth). **(Deferred — Postgres-only this sprint; ADR-0003 fast-path is a later optimization.)**
+- [x] Replay of a completed key returns the **stored** result; same key + different fingerprint → `409 Conflict`. (Store returns `OutcomeReplay`/`OutcomeConflict`; transport maps `ErrIdempotencyConflict`/`ErrInProgress` → 409. End-to-end HTTP wiring lands with the real orchestrator in NS-205.)
+- [x] Tests: first call processes; replay returns the stored result; concurrent `in_progress` handled. (testcontainers: Reserved→InProgress→Replay→Conflict; plus a pure `Fingerprint` stability test. JSONB compared semantically, not byte-wise.)
 
 ## NS-203 · Transfer state machine — happy path (FR-T3)
 - [ ] `internal/switch/statemachine.go` — encode the ARCHITECTURE §4 transitions; `INITIATED → DEBIT_PENDING → DEBITED → AWAITING_SETTLEMENT → SETTLED`.

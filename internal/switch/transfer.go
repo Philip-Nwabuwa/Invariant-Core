@@ -47,6 +47,12 @@ var (
 	ErrMissingField = errors.New("transfer: required field missing")
 	// ErrNotFound signals no transfer exists for the given id.
 	ErrNotFound = errors.New("transfer: not found")
+	// ErrIdempotencyConflict signals the same Idempotency-Key was reused with a
+	// different request body — maps to HTTP 409.
+	ErrIdempotencyConflict = errors.New("transfer: idempotency-key reused with a different request")
+	// ErrInProgress signals another request with this Idempotency-Key is still
+	// being processed — maps to HTTP 409.
+	ErrInProgress = errors.New("transfer: a request with this idempotency-key is in progress")
 )
 
 // CreateRequest is the validated domain input for a new transfer.

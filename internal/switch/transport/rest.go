@@ -120,6 +120,9 @@ func statusFor(err error) int {
 	switch {
 	case errors.Is(err, transfer.ErrNotFound):
 		return http.StatusNotFound
+	case errors.Is(err, transfer.ErrIdempotencyConflict),
+		errors.Is(err, transfer.ErrInProgress):
+		return http.StatusConflict
 	case errors.Is(err, transfer.ErrMissingIdempotencyKey),
 		errors.Is(err, transfer.ErrNonPositiveAmount),
 		errors.Is(err, transfer.ErrUnknownCurrency),
