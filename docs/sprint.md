@@ -144,9 +144,10 @@ Source of truth for Sprint 2 progress. Same rule: implement → verify → tick 
 - [x] Tests: first call processes; replay returns the stored result; concurrent `in_progress` handled. (testcontainers: Reserved→InProgress→Replay→Conflict; plus a pure `Fingerprint` stability test. JSONB compared semantically, not byte-wise.)
 
 ## NS-203 · Transfer state machine — happy path (FR-T3)
-- [ ] `internal/switch/statemachine.go` — encode the ARCHITECTURE §4 transitions; `INITIATED → DEBIT_PENDING → DEBITED → AWAITING_SETTLEMENT → SETTLED`.
-- [ ] `internal/switch/orchestrator.go` — drive a transfer through the machine, persisting each state in `transactions.status` (single externalized source of state).
-- [ ] Unit tests: legal transitions advance; illegal transitions error.
+- [x] `internal/switch/statemachine.go` — encode the ARCHITECTURE §4 transitions; `INITIATED → DEBIT_PENDING → DEBITED → AWAITING_SETTLEMENT → SETTLED`. (`transitions` table + `State.CanTransition`; `statusForState` maps the 5 rich states → 3 coarse `transactions.status` values via `pkg/canonical`; `stateForStatus` inverts for the read model.)
+- [x] `internal/switch/orchestrator.go` — drive a transfer through the machine, persisting each state in `transactions.status` (single externalized source of state). (`Orchestrator` implements `Service`; synchronous happy path; `Ledger`/`Rail`/`Store` interfaces (real wiring NS-204/205). Switch owns one `transactions` row per transfer carrying `idempotency_key`+lifecycle status; source/dest/amount stashed in `metadata` JSONB for GET. `PostgresStore` over new `switch/postgres/queries/transactions.sql`.)
+- [x] Unit tests: legal transitions advance; illegal transitions error. (White-box `CanTransition`/`statusForState`/`stateForStatus`; testcontainers orchestrator happy-path (debit/settle/rail each called once, GET reconstructs fields) + debit-failure-aborts.)
+- Note: `cmd/switchd` still wires `StubService`; the swap to `Orchestrator` (with real ledger/rail + idempotency) lands in NS-205. Data-model (switch row + ledger postings linked by `reference`) to be confirmed there.
 
 ## NS-204 · `mockrail` v1 — success path (ARCHITECTURE §2.3)
 - [ ] `internal/mockrail/server.go` — `SendToRail` returns success after a configurable latency (`MOCKRAIL_LATENCY_MS`); serve on `:50053` in `cmd/mockrail`.
