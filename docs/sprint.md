@@ -102,9 +102,9 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] Test asserting the DB trigger `trg_entries_no_update` rejects a raw UPDATE and a DELETE on `entries` (expect error).
 
 ## NS-105 · Property-based conservation test (AC-2)
-- [ ] Add `pgregory.net/rapid` to `go.mod`.
-- [ ] Property: generate random *balanced* transaction sets across N seeded accounts; after posting all, assert the sum of every account balance equals the starting total (value conserved).
-- [ ] Property: generated *unbalanced* sets are always rejected by `PostTransaction` (never committed).
+- [x] Add `pgregory.net/rapid` to `go.mod`.
+- [x] Property: generate random *balanced* transaction sets across N seeded accounts; after posting all, assert the sum of every account balance equals the starting total (value conserved).
+- [x] Property: generated *unbalanced* sets are always rejected by `PostTransaction` (never committed).
 
 ## NS-106 · ledger gRPC surface + `ExportTransactions` (FR-L5)
 - [ ] Expand `api/proto/ledger/v1/ledger.proto`: `PostTransaction`, `GetBalance`, `GetAccount`, `ListEntries`, `ExportTransactions(window)`; keep `Ping`. `make proto`.
