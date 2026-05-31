@@ -2,14 +2,26 @@ syntax = "proto3";
 
 package ledger.v1;
 
+import "google/protobuf/timestamp.proto";
+
 option go_package = "github.com/Philip-Nwabuwa/Invariant-Core/api/gen/ledger/v1;ledgerv1";
 
-// LedgerService is the gRPC surface of the ledger. Sprint 0 defines only a
-// health Ping; PostTransaction, GetBalance, ListEntries, and ExportTransactions
-// are added in Sprint 1.
+// LedgerService is the gRPC surface of the ledger (the source of internal
+// truth). It posts balanced journal entries, derives balances from the journal,
+// and exports canonical transaction records for reconciliation.
 service LedgerService {
-  // Ping is a liveness check used while the real surface is being built.
+  // Ping is a liveness check.
   rpc Ping(PingRequest) returns (PingResponse);
+  // PostTransaction records one balanced set of journal entries.
+  rpc PostTransaction(PostTransactionRequest) returns (PostTransactionResponse);
+  // GetBalance derives an account's balance from its journal entries.
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+  // GetAccount returns an account by its code.
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  // ListEntries returns the journal lines of a transaction.
+  rpc ListEntries(ListEntriesRequest) returns (ListEntriesResponse);
+  // ExportTransactions streams canonical records over a time window.
+  rpc ExportTransactions(ExportTransactionsRequest) returns (stream ExportTransactionsResponse);
 }
 
 // PingRequest is an empty liveness request.
@@ -19,4 +31,116 @@ message PingRequest {}
 message PingResponse {
   // ok is true when the service is serving.
   bool ok = 1;
+}
+
+// Direction is the side of the ledger an entry posts to.
+enum Direction {
+  DIRECTION_UNSPECIFIED = 0;
+  DIRECTION_DEBIT = 1;
+  DIRECTION_CREDIT = 2;
+}
+
+// EntryInput is one journal line in a posting request. amount_minor is a
+// positive magnitude; the direction carries the sign.
+message EntryInput {
+  string account_code = 1;
+  Direction direction = 2;
+  int64 amount_minor = 3;
+  string currency = 4;
+}
+
+// PostTransactionRequest records a balanced money movement.
+message PostTransactionRequest {
+  string reference = 1;
+  // type is one of transfer | reversal | fee.
+  string type = 2;
+  // status defaults to "pending" when empty.
+  string status = 3;
+  repeated EntryInput entries = 4;
+  map<string, string> metadata = 5;
+}
+
+// PostTransactionResponse returns the new transaction id.
+message PostTransactionResponse {
+  string transaction_id = 1;
+}
+
+// GetBalanceRequest selects an account by code.
+message GetBalanceRequest {
+  string account_code = 1;
+}
+
+// GetBalanceResponse is the derived balance in minor units.
+message GetBalanceResponse {
+  string account_code = 1;
+  int64 balance_minor = 2;
+  string currency = 3;
+}
+
+// GetAccountRequest selects an account by code.
+message GetAccountRequest {
+  string code = 1;
+}
+
+// Account is a chart-of-accounts entry.
+message Account {
+  string id = 1;
+  string code = 2;
+  string name = 3;
+  string type = 4;
+  string currency = 5;
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// GetAccountResponse wraps an account.
+message GetAccountResponse {
+  Account account = 1;
+}
+
+// ListEntriesRequest selects entries by transaction id.
+message ListEntriesRequest {
+  string transaction_id = 1;
+}
+
+// Entry is one stored journal line.
+message Entry {
+  string id = 1;
+  string transaction_id = 2;
+  string account_id = 3;
+  Direction direction = 4;
+  int64 amount_minor = 5;
+  string currency = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+// ListEntriesResponse is the journal lines of a transaction.
+message ListEntriesResponse {
+  repeated Entry entries = 1;
+}
+
+// ExportTransactionsRequest bounds the export window: [from, to).
+message ExportTransactionsRequest {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+}
+
+// ExportTransactionsResponse carries one canonical record in the export stream.
+message ExportTransactionsResponse {
+  CanonicalRecord record = 1;
+}
+
+// CanonicalRecord is the canonical transaction record (ARCHITECTURE §3), the
+// shape that crosses every system boundary.
+message CanonicalRecord {
+  string transaction_id = 1;
+  string reference = 2;
+  string source = 3;
+  string destination = 4;
+  int64 amount_minor = 5;
+  string currency = 6;
+  string type = 7;
+  string status = 8;
+  google.protobuf.Timestamp initiated_at = 9;
+  google.protobuf.Timestamp settled_at = 10;
+  map<string, string> metadata = 11;
 }

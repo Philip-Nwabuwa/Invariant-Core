@@ -107,10 +107,10 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] Property: generated *unbalanced* sets are always rejected by `PostTransaction` (never committed).
 
 ## NS-106 · ledger gRPC surface + `ExportTransactions` (FR-L5)
-- [ ] Expand `api/proto/ledger/v1/ledger.proto`: `PostTransaction`, `GetBalance`, `GetAccount`, `ListEntries`, `ExportTransactions(window)`; keep `Ping`. `make proto`.
-- [ ] `internal/ledger/grpc.go` — gRPC server mapping proto ⇄ domain; register on `:50051` in `cmd/ledger` (replace the empty `serviceboot` surface).
-- [ ] `ExportTransactions` streams `canonical.Record`s for a time window (status/type/amounts mapped from the journal).
-- [ ] Mapping unit test (proto ⇄ `canonical.Record`) + a gRPC smoke test.
+- [x] Expand `api/proto/ledger/v1/ledger.proto`: `PostTransaction`, `GetBalance`, `GetAccount`, `ListEntries`, `ExportTransactions(window)`; keep `Ping`. `make proto`.
+- [x] `internal/ledger/grpc.go` — gRPC server mapping proto ⇄ domain; register on `:50051` in `cmd/ledger` (replace the empty `serviceboot` surface). (serviceboot gained `RegisterGRPC`/`Cleanup` hooks.)
+- [x] `ExportTransactions` streams `canonical.Record`s for a time window (status/type/amounts mapped from the journal).
+- [x] Mapping unit test (proto ⇄ `canonical.Record`) + a gRPC smoke test.
 
 ## Verification (Sprint 1 DoD)
 1. [ ] `make sqlc` + `make proto` regenerate cleanly; `make build` green.

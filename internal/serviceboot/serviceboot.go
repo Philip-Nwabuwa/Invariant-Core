@@ -32,8 +32,14 @@ type Options struct {
 	ServiceName string
 	// HealthAddr is the listen address for /healthz and /metrics (required).
 	HealthAddr string
-	// GRPCAddr, if non-empty, starts an empty *grpc.Server on that address.
+	// GRPCAddr, if non-empty, starts a *grpc.Server on that address.
 	GRPCAddr string
+	// RegisterGRPC, if set, is called with the gRPC server after it is created
+	// and before it serves, so callers can register their service surface. When
+	// nil the server starts with an empty surface (Sprint 0 behaviour).
+	RegisterGRPC func(*grpc.Server)
+	// Cleanup, if set, runs during graceful shutdown (e.g. closing a DB pool).
+	Cleanup func()
 }
 
 // Run boots the service and blocks until a termination signal, then shuts
@@ -67,6 +73,9 @@ func Run(opts Options) error {
 			return err
 		}
 		grpcSrv = grpc.NewServer()
+		if opts.RegisterGRPC != nil {
+			opts.RegisterGRPC(grpcSrv)
+		}
 		go func() {
 			if err := grpcSrv.Serve(lis); err != nil {
 				serveErr <- err
@@ -87,10 +96,10 @@ func Run(opts Options) error {
 		logger.Error("server error; shutting down", "service", opts.ServiceName, "error", err)
 	}
 
-	return shutdown(healthSrv, grpcSrv, shutdownTracing)
+	return shutdown(healthSrv, grpcSrv, shutdownTracing, opts.Cleanup)
 }
 
-func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing tracing.ShutdownFunc) error {
+func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing tracing.ShutdownFunc, cleanup func()) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -100,6 +109,9 @@ func shutdown(healthSrv *http.Server, grpcSrv *grpc.Server, shutdownTracing trac
 	}
 	if grpcSrv != nil {
 		grpcSrv.GracefulStop()
+	}
+	if cleanup != nil {
+		cleanup()
 	}
 	if shutdownTracing != nil {
 		if err := shutdownTracing(shutdownCtx); err != nil && firstErr == nil {
