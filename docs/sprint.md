@@ -93,9 +93,9 @@ Source of truth for Sprint 1 progress. Same rule: implement → verify → tick 
 - [x] Unit tests: balanced posts succeed; unbalanced / single-entry / mixed-currency are rejected.
 
 ## NS-103 · `GetBalance` derived + optional cache (FR-L4)
-- [ ] `GetBalance(accountCode)` derives from entries via `SumEntriesByAccount`, applying the account's normal-balance direction (asset/expense debit-normal; liability/equity/revenue credit-normal).
-- [ ] Update `account_balances` in the **same** serializable txn as `PostTransaction` (optional cache).
-- [ ] Test: derived balance == cached balance after a random series of posts.
+- [x] `GetBalance(accountCode)` derives from entries via `SumEntriesByAccount`, applying the account's normal-balance direction (asset/expense debit-normal; liability/equity/revenue credit-normal).
+- [x] Update `account_balances` in the **same** serializable txn as `PostTransaction` (optional cache).
+- [x] Test: derived balance == cached balance after a random series of posts.
 
 ## NS-104 · Append-only enforcement (FR-L3)
 - [ ] Audit the repository: entries are insert-only — no UPDATE/DELETE path anywhere.
