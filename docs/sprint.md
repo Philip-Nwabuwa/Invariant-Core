@@ -340,7 +340,7 @@ Source of truth for Sprint 6 progress. Same rule: implement → verify → tick 
 - [x] Fill `docs/adr/0001…0005` from stubs to full context → decision → consequences. (All five are complete context→decision→consequences docs: 0001 integer money, 0002 serializable ledger + the SETTLEMENT-hotspot retry SLI, 0003 durable idempotency + the finalized `in_progress` replay contract, 0004 transactional outbox, 0005 canonical record. No stub/TODO markers remain; ADR-0003's forward-looking "to finalize" wording tidied to read as finalized post-NS-202.)
 
 ## NS-605 · Build-log posts
-- [ ] Write the ROADMAP portfolio-checkpoint posts (after Sprints 1/3/4/5), each leading with the Nigerian number + the engineering decision + the rejected alternative.
+- [x] Write the ROADMAP portfolio-checkpoint posts (after Sprints 1/3/4/5), each leading with the Nigerian number + the engineering decision + the rejected alternative. (Four posts under `docs/build-log/`: `01-conservation-invariant` (₦1.07q / integer money + append-only + property test; rejected example-based tests), `02-in-doubt-and-reversal` (₦10k penalty / TSQ-before-reverse + compensating reversal + outbox; rejected optimistic assume-and-go), `03-reconciliation` (11.2bn txns / one canonical record + deterministic streaming matching; rejected full-file load), `04-feedback-loop` (24h clock / reconcile→CorrectiveReversal auto-close; rejected human-and-ticket). Each ends with a question for other engineers. Linked from `docs/ROADMAP.md` checkpoints + the README Docs section.)
 
 ## NS-606 · (Optional, deferred) breadth track
 - [ ] If pursued, spin up a **separate** repo (USSD engine or offline-sync) rather than expanding this one.

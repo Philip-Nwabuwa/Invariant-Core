@@ -93,6 +93,7 @@ whose headline panel is the serialization-retry SLI from ADR-0002.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, the canonical contract, state machine, consistency patterns, folder structure, tools, ADRs, testing.
 - [docs/DESIGN-NOTES.md](docs/DESIGN-NOTES.md) — refinements & known edges: in-doubt status-query before reversal, suspense-account contention, and other deliberate decisions.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — the 12-week / 6-sprint build plan with stories, definitions of done, and portfolio checkpoints.
+- [docs/build-log/](docs/build-log/) — short build-log posts (conservation invariant, in-doubt + reversal, reconciliation, the feedback loop), each leading with the Nigerian number, the decision, and the alternative rejected.
 - [db/schema.sql](db/schema.sql) — the full reference Postgres schema.
 
 ## Disclaimer

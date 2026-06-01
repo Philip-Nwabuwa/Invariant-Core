@@ -111,12 +111,12 @@ A 12-week build in seven sprints (a sprint 0 plus six two-week sprints). The ord
 
 Post a short build-log entry at the end of each sprint — the series outperforms one launch post and shows sustained depth:
 
-- **After Sprint 1:** "How I made a ledger that *can't* lose a kobo — property-based testing the conservation invariant." (artifact: the failing-then-passing property test)
-- **After Sprint 3:** "₦52bn-scale systems live or die on consistency, not uptime. Here's the in-doubt state and the reversal that stops a debit stranding a trader's money." (artifact: the chaos-test dashboard)
-- **After Sprint 4:** "The least glamorous code in fintech decides whether you get your money back. A reconciliation engine that finds the silent mismatches." (artifact: an exceptions report)
-- **After Sprint 5:** "Detection feeding correction: when reconciliation finds a pending reversal, the switch fixes it automatically." (artifact: the before/after reconcile runs)
+- **After Sprint 1:** "How I made a ledger that *can't* lose a kobo — property-based testing the conservation invariant." (artifact: the failing-then-passing property test) → [build-log/01-conservation-invariant.md](build-log/01-conservation-invariant.md)
+- **After Sprint 3:** "₦52bn-scale systems live or die on consistency, not uptime. Here's the in-doubt state and the reversal that stops a debit stranding a trader's money." (artifact: the chaos-test dashboard) → [build-log/02-in-doubt-and-reversal.md](build-log/02-in-doubt-and-reversal.md)
+- **After Sprint 4:** "The least glamorous code in fintech decides whether you get your money back. A reconciliation engine that finds the silent mismatches." (artifact: an exceptions report) → [build-log/03-reconciliation.md](build-log/03-reconciliation.md)
+- **After Sprint 5:** "Detection feeding correction: when reconciliation finds a pending reversal, the switch fixes it automatically." (artifact: the before/after reconcile runs) → [build-log/04-feedback-loop.md](build-log/04-feedback-loop.md)
 
-Each post leads with the Nigerian number and the engineering decision, names the alternative you rejected, and ends with a real question for other engineers.
+Each post leads with the Nigerian number and the engineering decision, names the alternative you rejected, and ends with a real question for other engineers. The four posts live under [docs/build-log/](build-log/).
 
 ## Scope guardrails
 
