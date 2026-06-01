@@ -331,7 +331,7 @@ Source of truth for Sprint 6 progress. Same rule: implement → verify → tick 
 - [ ] README with the architecture diagram (`docs/diagrams/data-flow.svg`) and a "failure modes" section; a quickstart that matches the Makefile.
 
 ## NS-602 · Grafana dashboards
-- [ ] Commit Grafana dashboards + provisioning under `deployments/` (alongside `prometheus.yml`).
+- [x] Commit Grafana dashboards + provisioning under `deployments/` (alongside `prometheus.yml`). (`deployments/grafana/dashboards/invariant-core.json` — 7 panels: settled throughput, outcome split, reversal-latency p99, the ADR-0002 ledger serialization-retry/exhausted SLI (the headline backpressure panel), outbox lag, dead-letters, exhausted budgets — all wired to live metric names verified against the code. Auto-provisioned via `provisioning/datasources/prometheus.yml` (datasource uid `prometheus`) + `provisioning/dashboards/dashboards.yml`; `docker-compose.yml` mounts both with anonymous-admin so it renders on first `make dev`. Screenshot at `deployments/grafana/load-dashboard.png`. Fixed a misleading panel-3 title that claimed POST p99 while querying reversal latency.)
 
 ## NS-603 · Scripted demo
 - [ ] One script: fire transfers under chaos → show zero stranded debits → run reconcile → trigger a re-reversal → show it resolved.

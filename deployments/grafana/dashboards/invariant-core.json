@@ -87,7 +87,7 @@
     },
     {
       "id": 3,
-      "title": "POST /v1/transfers p99 (NFR-3, via k6/Prometheus or app)",
+      "title": "Reversal latency p99 (seconds)",
       "type": "timeseries",
       "datasource": {
         "type": "prometheus",
