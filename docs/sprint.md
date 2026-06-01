@@ -236,8 +236,8 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 **Decisions:** `reconcile` is a `cobra` CLI (`cmd/reconcile`) configured via `viper` (flags/env); adapters normalize every input to `canonical.Record`; the matcher keys on `reference` with exact-amount + timestamp-window tolerance; runs persist to `recon_runs` + `recon_exceptions`; output is order-independent and re-runnable without double-counting.
 
 ## NS-401 · Cobra CLI + Viper config (FR-C)
-- [ ] Flesh out `cmd/reconcile run`: `--internal`, `--external`, `--tolerance-window`, `--format=text|json` via viper (flags + env).
-- [ ] Replace the Sprint-0 "not implemented" stub with the real command wiring.
+- [x] Flesh out `cmd/reconcile run`: `--internal`, `--external`, `--tolerance-window`, `--format=text|json` via viper (flags + env). (Plus `--external-format=nibss|csv`, `--db-url`, `--no-persist`; all bound through `viper.New()` + `AutomaticEnv()` + `BindPFlags`.)
+- [x] Replace the Sprint-0 "not implemented" stub with the real command wiring. (`runReconcile`: open adapters → `reconcile.Match` → render text/JSON to stdout → idempotent persist (skipped when an identical fingerprint already ran). Live: a 100-clean/5-per-category fixture → matched=105, 25 exceptions (5 each), byte-identical JSON on re-run.)
 
 ## NS-402 · Adapters → canonical (FR-C1)
 - [x] `internal/reconcile/adapters/ledger.go` — read the ledger `ExportTransactions` output → `canonical.Record`. (Streaming JSONL `LedgerReader`: one `canonical.Record` per line via `json.Decoder`, `Next()` returns `io.EOF` at end — never buffers the file.)
@@ -262,19 +262,19 @@ Source of truth for Sprint 4 progress. Same rule: implement → verify → tick 
 - [x] Re-running the same inputs does not double-count (idempotent persistence). (`FileFingerprint` = streamed SHA-256 of the input pair, stored in `summary->>'input_fingerprint'`; `Store.FindByFingerprint` lets the CLI skip a re-persist of identical inputs. `TestStore_PersistAndIdempotentGuard` proves the guard leaves the exception row count unchanged.)
 
 ## NS-407 · `scripts/gen_settlement` — fixture generator
-- [ ] Generate a settlement file with K injected discrepancies spanning every category (unmatched, amount-mismatch, duplicate, pending-reversal).
-- [ ] Seeded/deterministic so fixtures are reproducible.
+- [x] Generate a settlement file with K injected discrepancies spanning every category (unmatched, amount-mismatch, duplicate, pending-reversal). (`internal/reconcile/fixture` generates a paired internal JSONL + external NIBSS CSV; `scripts/gen_settlement` writes both via `fixture.WriteJSONL` + `adapters.WriteNIBSS`. Injects `PerCategory` of each: amount_mismatch, unmatched_internal, unmatched_external, duplicate, pending_reversal. Flags `--count/--discrepancies/--seed/--internal-out/--external-out`; `make gen-settlement GEN_ARGS=…`.)
+- [x] Seeded/deterministic so fixtures are reproducible. (All amounts + the final shuffle of both sides derive from one `math/rand` source seeded by `--seed`; same seed → identical files. Both sides are shuffled so row order carries no signal.)
 
 ## NS-408 · Fixture test — 100% recall (AC-3, AC-4)
-- [ ] Fixture pair with K injected discrepancies; assert 100% recall and correct category labels (AC-3).
-- [ ] Assert a second run yields identical reports with no double-counted exceptions (AC-4).
+- [x] Fixture pair with K injected discrepancies; assert 100% recall and correct category labels (AC-3). (`recall_test.go` `TestFixture_FullRecall`, 50 clean + 4 per category: every injected ref is found with the exact category, per-category counts match, total has no spurious extras, and matched == expected. External fed through a `Stream` like a real adapter.)
+- [x] Assert a second run yields identical reports with no double-counted exceptions (AC-4). (`TestFixture_DeterministicReport`: the JSON report is byte-identical across repeated runs; `TestStore_PersistAndIdempotentGuard` covers the DB-side no-double-count via the fingerprint guard.)
 
-## Verification (Sprint 4 DoD)
-1. [ ] `make gen-settlement`, then `make reconcile INTERNAL=… EXTERNAL=…` produces a text + JSON report.
-2. [ ] Every injected discrepancy is found and correctly categorized (AC-3).
-3. [ ] Re-running the same inputs gives identical reports and no new `recon_exceptions` (AC-4).
-4. [ ] A large generated file reconciles in seconds (streaming, not full-load).
-5. [ ] `go test ./... -race` + `make lint` green.
+## Verification (Sprint 4 DoD) — ✅ PASSED 2026-06-01
+1. [x] `make gen-settlement`, then `make reconcile INTERNAL=… EXTERNAL=…` produces a text + JSON report. (`make gen-settlement GEN_ARGS="--count 100 --discrepancies 5 --seed 11"` → `out/internal.jsonl`+`out/settlement.csv`; `make reconcile … RECON_ARGS="--no-persist"` prints the text report, `--format json` valid JSON. matched=105, 25 exceptions, 5 per category.)
+2. [x] Every injected discrepancy is found and correctly categorized (AC-3). (`TestFixture_FullRecall`: 50 clean + 4 per category → 100% recall, exact category per ref, no spurious extras. Live 200k run → 250 exceptions, 50 each.)
+3. [x] Re-running the same inputs gives identical reports and no new `recon_exceptions` (AC-4). (`TestFixture_DeterministicReport` (byte-identical JSON across runs) + `TestStore_PersistAndIdempotentGuard` against real Postgres — the fingerprint guard leaves the row count unchanged on a re-run.)
+4. [x] A large generated file reconciles in seconds (streaming, not full-load). (200,000 transfers each side reconciled in **0.94s** real; the external side streams through the `Stream` interface, only the keyed internal index is held in memory.)
+5. [x] `go test ./... -race` + `make lint` green. (Whole repo: 11 packages ok, no data races; lint 0 issues.)
 
 ---
 
