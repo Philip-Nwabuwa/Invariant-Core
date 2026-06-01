@@ -54,9 +54,38 @@ curl -i -X POST localhost:8080/v1/transfers \
 curl localhost:8080/v1/transfers/<id>
 
 # generate a settlement file with injected discrepancies, then reconcile
-make gen-settlement
-make reconcile INTERNAL=./out/ledger-export.csv EXTERNAL=./out/nibss-settlement.csv
+make gen-settlement                                    # writes out/internal.jsonl + out/settlement.csv
+make reconcile INTERNAL=./out/internal.jsonl EXTERNAL=./out/settlement.csv RECON_ARGS="--no-persist"
 ```
+
+Or run the whole story end-to-end with one command (after `make dev && make migrate-up`):
+
+```bash
+make demo   # fires transfers under a chaotic rail, proves zero stranded debits,
+            # runs reconcile, triggers a corrective re-reversal, shows it resolved
+```
+
+## Failure modes
+
+The enemy here is not downtime — it is *inconsistency*. The single guarantee the
+whole system is built to keep: **every debit ends matched by a credit or a
+completed reversal — zero stranded debits** (AC-1). Here is what happens when each
+thing goes wrong, and where that behaviour is proven.
+
+| Failure | What the system does | Proven by |
+|---|---|---|
+| **Rail times out / replies "unknown"** | The transfer goes to `IN_DOUBT` and the switch issues a **Transaction Status Query** before deciding — it never assumes success or failure. TSQ-settled → settle; TSQ-no-settlement → `REVERSAL_PENDING`; inconclusive after bounded retries → `MANUAL_REVIEW` (money held in the suspense account, never lost). | DESIGN-NOTES §1; `test/chaos` |
+| **Duplicate rail callback** | A second "success" for an already-terminal transfer is a no-op. Row-locked transitions and a per-leg idempotency key (`<id>:settle`) close the duplicate/poller race so the settlement leg posts exactly once. | `TestRailCallback_DuplicateIsNoOp` |
+| **`switchd` crashes mid-flow** (between debit and settlement) | No dual-write: the state change and its follow-up event are written in one DB transaction to the outbox. On restart a recovery sweep re-enqueues every resumable transfer and the poller drives it to its true terminal state — no stranded debit, no doubled debit. | `scripts/crash_recovery_demo.sh` (NS-306, ADR-0004) |
+| **Hot `SETTLEMENT` account under load** | Ledger posts run at `SERIALIZABLE`; contention on the shared suspense account surfaces as `40001` serialization failures. A bounded retry loop absorbs them and, when the budget is exhausted, returns a graceful `503`/`Unavailable` (`Retry-After`) rather than corrupting a balance. The serialization-retry rate is a first-class SLI. | ADR-0002; NS-505; the k6 run (NS-504) |
+| **A reversal never settles (stranded `pending_reversal`)** | Reconcile detects it and feeds the offending reference back to the switch (`CorrectiveReversal`), which re-drives the reversal through the existing outbox path. The next reconcile run shows the exception resolved. | NS-501/502; `scripts/feedback_loop_demo.sh` |
+| **Reconciliation finds a mismatch** | Internal (ledger export) and external (settlement file) are both normalised to one canonical record and matched on reference + exact amount within a time window. Disagreements are categorised — `unmatched_internal`, `unmatched_external`, `amount_mismatch`, `pending_reversal`, `duplicate` — deterministically and re-runnably (no double-counting). | NS-403/404; `TestFixture_FullRecall` |
+
+Reversals are **compensating** ledger transactions (a new parent-linked entry that
+restores the source), never edits to the append-only journal. The load and chaos
+behaviour is visible on the committed Grafana dashboard
+([`deployments/grafana/load-dashboard.png`](deployments/grafana/load-dashboard.png)),
+whose headline panel is the serialization-retry SLI from ADR-0002.
 
 ## Docs
 
@@ -64,6 +93,7 @@ make reconcile INTERNAL=./out/ledger-export.csv EXTERNAL=./out/nibss-settlement.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — system design, the canonical contract, state machine, consistency patterns, folder structure, tools, ADRs, testing.
 - [docs/DESIGN-NOTES.md](docs/DESIGN-NOTES.md) — refinements & known edges: in-doubt status-query before reversal, suspense-account contention, and other deliberate decisions.
 - [docs/ROADMAP.md](docs/ROADMAP.md) — the 12-week / 6-sprint build plan with stories, definitions of done, and portfolio checkpoints.
+- [docs/build-log/](docs/build-log/) — short build-log posts (conservation invariant, in-doubt + reversal, reconciliation, the feedback loop), each leading with the Nigerian number, the decision, and the alternative rejected.
 - [db/schema.sql](db/schema.sql) — the full reference Postgres schema.
 
 ## Disclaimer

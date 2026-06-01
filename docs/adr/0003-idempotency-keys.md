@@ -13,15 +13,15 @@ request fingerprint and the produced result. A replay returns the stored result
 instead of reprocessing. Redis is only a fast-path cache in front of this table,
 never the record of truth — a replay after a cache flush is still correct.
 
-## Consequences / contract to finalize
+## Consequences / replay contract
 - The transfer's durable state machine (in Postgres) is the source of truth, not
   the idempotency row (ties to ADR-0004).
-- **Reserved `in_progress` replay contract** (DESIGN-NOTES #5), to be specified
-  with the store in NS-202:
+- **`in_progress` replay contract** (DESIGN-NOTES #5), as specified with the store
+  in NS-202:
   - A replay within the lease window (`expires_at` not passed) returns
     "in progress, retry later".
   - A replay past the lease re-attaches to the existing `transaction_id` and lets
     the outbox poller drive it to a terminal state, then returns that result.
   - A replay never starts a second transfer: the key is unique and already bound
     to a `transaction_id`.
-- Lease duration and the exact replay response shape are defined in NS-202.
+- Lease duration and the exact replay response shape were defined in NS-202.

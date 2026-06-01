@@ -328,25 +328,25 @@ Source of truth for Sprint 6 progress. Same rule: implement → verify → tick 
 **Decisions:** dashboards + deploy assets under `deployments/`; ADRs completed in `docs/adr`; the optional breadth track (NS-606) stays a *separate* repo — do not bloat this one.
 
 ## NS-601 · Finalize README
-- [ ] README with the architecture diagram (`docs/diagrams/data-flow.svg`) and a "failure modes" section; a quickstart that matches the Makefile.
+- [x] README with the architecture diagram (`docs/diagrams/data-flow.svg`) and a "failure modes" section; a quickstart that matches the Makefile. (Moved `docs/README.md` → root `README.md` so a fresh clone sees it and every root-relative link/image resolves. Fixed the stale reconcile quickstart to the real `make gen-settlement` outputs (`out/internal.jsonl` + `out/settlement.csv`) and added a one-line `make demo` path. Added a **Failure modes** table — rail timeout/TSQ, duplicate callback, mid-flow crash recovery, SETTLEMENT contention/backpressure, stranded `pending_reversal` feedback loop, reconciliation mismatch — each with what happens and where it's proven, led by the zero-stranded-debits guarantee and pointing at the Grafana dashboard.)
 
 ## NS-602 · Grafana dashboards
-- [ ] Commit Grafana dashboards + provisioning under `deployments/` (alongside `prometheus.yml`).
+- [x] Commit Grafana dashboards + provisioning under `deployments/` (alongside `prometheus.yml`). (`deployments/grafana/dashboards/invariant-core.json` — 7 panels: settled throughput, outcome split, reversal-latency p99, the ADR-0002 ledger serialization-retry/exhausted SLI (the headline backpressure panel), outbox lag, dead-letters, exhausted budgets — all wired to live metric names verified against the code. Auto-provisioned via `provisioning/datasources/prometheus.yml` (datasource uid `prometheus`) + `provisioning/dashboards/dashboards.yml`; `docker-compose.yml` mounts both with anonymous-admin so it renders on first `make dev`. Screenshot at `deployments/grafana/load-dashboard.png`. Fixed a misleading panel-3 title that claimed POST p99 while querying reversal latency.)
 
 ## NS-603 · Scripted demo
-- [ ] One script: fire transfers under chaos → show zero stranded debits → run reconcile → trigger a re-reversal → show it resolved.
+- [x] One script: fire transfers under chaos → show zero stranded debits → run reconcile → trigger a re-reversal → show it resolved. (`scripts/demo.sh` + `make demo`, the unified portfolio narrative reusing the mechanisms from `crash_recovery_demo.sh`/`feedback_loop_demo.sh`. Act 1 fires N seeded-chaos transfers (decline/timeout/duplicate-callback/latency) through the real ledger+mockrail+switchd. Act 2 asserts zero non-terminal transfers, one debit leg per transfer (no doubled debit), and that every reversed transfer has a compensating reversal row + every settled has a settlement leg — zero stranded debits. Act 3 strands a reversal in `reversal_pending` (kill ledger + delete its outbox event), runs `reconcile run --switch-addr` which detects `pending_reversal` and fires `CorrectiveReversal` (requeued=true) → transfer REVERSED, source restored, one reversal row. Act 4's second reconcile run reports `pending_reversal=0` (AC-5). **Verified live (seed=42): split 6 settled / 6 reversed, all assertions PASS, loop closed.**)
 
 ## NS-604 · Complete the ADRs
-- [ ] Fill `docs/adr/0001…0005` from stubs to full context → decision → consequences.
+- [x] Fill `docs/adr/0001…0005` from stubs to full context → decision → consequences. (All five are complete context→decision→consequences docs: 0001 integer money, 0002 serializable ledger + the SETTLEMENT-hotspot retry SLI, 0003 durable idempotency + the finalized `in_progress` replay contract, 0004 transactional outbox, 0005 canonical record. No stub/TODO markers remain; ADR-0003's forward-looking "to finalize" wording tidied to read as finalized post-NS-202.)
 
 ## NS-605 · Build-log posts
-- [ ] Write the ROADMAP portfolio-checkpoint posts (after Sprints 1/3/4/5), each leading with the Nigerian number + the engineering decision + the rejected alternative.
+- [x] Write the ROADMAP portfolio-checkpoint posts (after Sprints 1/3/4/5), each leading with the Nigerian number + the engineering decision + the rejected alternative. (Four posts under `docs/build-log/`: `01-conservation-invariant` (₦1.07q / integer money + append-only + property test; rejected example-based tests), `02-in-doubt-and-reversal` (₦10k penalty / TSQ-before-reverse + compensating reversal + outbox; rejected optimistic assume-and-go), `03-reconciliation` (11.2bn txns / one canonical record + deterministic streaming matching; rejected full-file load), `04-feedback-loop` (24h clock / reconcile→CorrectiveReversal auto-close; rejected human-and-ticket). Each ends with a question for other engineers. Linked from `docs/ROADMAP.md` checkpoints + the README Docs section.)
 
 ## NS-606 · (Optional, deferred) breadth track
 - [ ] If pursued, spin up a **separate** repo (USSD engine or offline-sync) rather than expanding this one.
 
-## Verification (Sprint 6 DoD)
-1. [ ] Fresh clone → `make dev` → `make migrate-up` → `make seed` → run the demo from the README in under 15 minutes.
-2. [ ] Grafana shows the chaos-run dashboards from committed assets.
-3. [ ] All five ADRs are complete (no stub sections).
-4. [ ] `go test ./... -race`, `make test-integration`, and `make lint` all green.
+## Verification (Sprint 6 DoD) — ✅ PASSED 2026-06-01
+1. [x] Fresh clone → `make dev` → `make migrate-up` → `make seed` → run the demo from the README in under 15 minutes. (Ran `make dev` + `make migrate-up` (no change, idempotent) + `make seed` (CUST-001/002), then `make demo` end-to-end against the real ledger/mockrail/switchd: ACT 1 fired 12 seeded-chaos transfers → ACT 2 zero stranded (split 6 settled / 6 reversed, 12 debit legs, no orphan reversal/settlement legs) → ACT 3 reconcile fired `CorrectiveReversal` (requeued=true), transfer REVERSED + source restored 1037700→1037700, one reversal row → ACT 4 second run `pending_reversal=0`. Whole path completed in ~2 min, well under 15.)
+2. [x] Grafana shows the chaos-run dashboards from committed assets. (`make dev` auto-provisions; `GET :3000/api/health` ok and `/api/search?query=Invariant` returns the committed `invariant-core` "Transfers & Backpressure" dashboard — anonymous-admin, rendered from `deployments/grafana/dashboards/invariant-core.json` with no manual import.)
+3. [x] All five ADRs are complete (no stub sections). (`grep` for todo/tbd/fixme/"to finalize"/"to be specified" across `docs/adr/` is clean after the NS-604 wording tidy.)
+4. [x] `go test ./... -race`, `make test-integration`, and `make lint` all green. (Whole repo incl. `test/chaos` ok with `-race`; `test/integration` ok with `-tags=integration -race` (8.6s); `golangci-lint` 0 issues.)
