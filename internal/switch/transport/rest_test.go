@@ -3,6 +3,8 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	transfer "github.com/Philip-Nwabuwa/Invariant-Core/internal/switch"
 )
@@ -99,15 +103,16 @@ func TestCreateTransfer_Success(t *testing.T) {
 
 func TestCreateTransfer_BadRequests(t *testing.T) {
 	tests := []struct {
-		name    string
-		body    string
-		headers map[string]string
+		name     string
+		body     string
+		headers  map[string]string
+		wantCode string
 	}{
-		{"missing idempotency key", validBody, nil},
-		{"non-positive amount", `{"source":"A","destination":"B","amount_minor":0,"currency":"NGN","reference":"r"}`, withKey()},
-		{"unknown currency", `{"source":"A","destination":"B","amount_minor":100,"currency":"USD","reference":"r"}`, withKey()},
-		{"missing field", `{"source":"","destination":"B","amount_minor":100,"currency":"NGN","reference":"r"}`, withKey()},
-		{"invalid json", `{not json`, withKey()},
+		{"missing idempotency key", validBody, nil, codeMissingIdemKey},
+		{"non-positive amount", `{"source":"A","destination":"B","amount_minor":0,"currency":"NGN","reference":"r"}`, withKey(), codeValidation},
+		{"unknown currency", `{"source":"A","destination":"B","amount_minor":100,"currency":"USD","reference":"r"}`, withKey(), codeValidation},
+		{"missing field", `{"source":"","destination":"B","amount_minor":100,"currency":"NGN","reference":"r"}`, withKey(), codeValidation},
+		{"invalid json", `{not json`, withKey(), codeValidation},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -115,7 +120,82 @@ func TestCreateTransfer_BadRequests(t *testing.T) {
 			if rec.Code != http.StatusBadRequest {
 				t.Fatalf("status = %d, want 400; body=%s", rec.Code, rec.Body.String())
 			}
+			var resp errorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode error body: %v", err)
+			}
+			if resp.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", resp.Code, tt.wantCode)
+			}
+			if resp.Message == "" {
+				t.Error("expected a non-empty error message")
+			}
 		})
+	}
+}
+
+// errService is a transfer.Service that always fails with a fixed error, so the
+// transport's structured-error mapping can be exercised in isolation.
+type errService struct{ err error }
+
+func (s errService) Create(context.Context, string, transfer.CreateRequest) (transfer.View, error) {
+	return transfer.View{}, s.err
+}
+
+func (s errService) Get(context.Context, string) (transfer.View, error) {
+	return transfer.View{}, s.err
+}
+
+func TestCreateTransfer_StructuredErrorMapping(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		{"idempotency conflict", transfer.ErrIdempotencyConflict, http.StatusConflict, codeIdemConflict},
+		{"in progress", transfer.ErrInProgress, http.StatusConflict, codeInProgress},
+		{"backpressure", fmt.Errorf("post debit leg: %w", status.Error(codes.Unavailable, "ledger: serialization retries exhausted")), http.StatusServiceUnavailable, codeUnavailable},
+		{"opaque internal", errors.New("some internal failure"), http.StatusInternalServerError, codeInternal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			srv := NewHandler(errService{err: tt.err}).Routes()
+			rec := doRequest(t, srv, http.MethodPost, "/v1/transfers", validBody, withKey())
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			var resp errorResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("decode error body: %v", err)
+			}
+			if resp.Code != tt.wantCode {
+				t.Errorf("code = %q, want %q", resp.Code, tt.wantCode)
+			}
+			if tt.wantStatus == http.StatusInternalServerError && resp.Message != "internal error" {
+				t.Errorf("internal message = %q, want %q (no leak)", resp.Message, "internal error")
+			}
+			if tt.wantStatus == http.StatusServiceUnavailable && rec.Header().Get("Retry-After") == "" {
+				t.Error("503 missing Retry-After header")
+			}
+		})
+	}
+}
+
+// TestErrorBody_CarriesCorrelationID: the structured error echoes the request's
+// correlation id so a caller can quote it when reporting a failure.
+func TestErrorBody_CarriesCorrelationID(t *testing.T) {
+	headers := map[string]string{"X-Correlation-ID": "corr-err-1"}
+	rec := doRequest(t, newTestServer(), http.MethodPost, "/v1/transfers", validBody, headers)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 (missing idempotency key)", rec.Code)
+	}
+	var resp errorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.CorrelationID != "corr-err-1" {
+		t.Errorf("correlation_id = %q, want %q", resp.CorrelationID, "corr-err-1")
 	}
 }
 

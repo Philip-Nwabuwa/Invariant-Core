@@ -253,6 +253,115 @@ func (x *RailCallbackResponse) GetState() string {
 	return ""
 }
 
+// CorrectiveReversalRequest identifies the transfer whose reversal must be
+// re-driven, plus a free-text reason for the audit trail.
+type CorrectiveReversalRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reference     string                 `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CorrectiveReversalRequest) Reset() {
+	*x = CorrectiveReversalRequest{}
+	mi := &file_switch_v1_switch_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CorrectiveReversalRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CorrectiveReversalRequest) ProtoMessage() {}
+
+func (x *CorrectiveReversalRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_switch_v1_switch_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CorrectiveReversalRequest.ProtoReflect.Descriptor instead.
+func (*CorrectiveReversalRequest) Descriptor() ([]byte, []int) {
+	return file_switch_v1_switch_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CorrectiveReversalRequest) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
+func (x *CorrectiveReversalRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// CorrectiveReversalResponse reports the transfer's state after the corrective
+// request applied, and whether it actually re-enqueued a reversal (false means
+// it was an idempotent no-op — already reversed or not awaiting reversal).
+type CorrectiveReversalResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	Requeued      bool                   `protobuf:"varint,2,opt,name=requeued,proto3" json:"requeued,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CorrectiveReversalResponse) Reset() {
+	*x = CorrectiveReversalResponse{}
+	mi := &file_switch_v1_switch_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CorrectiveReversalResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CorrectiveReversalResponse) ProtoMessage() {}
+
+func (x *CorrectiveReversalResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_switch_v1_switch_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CorrectiveReversalResponse.ProtoReflect.Descriptor instead.
+func (*CorrectiveReversalResponse) Descriptor() ([]byte, []int) {
+	return file_switch_v1_switch_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CorrectiveReversalResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *CorrectiveReversalResponse) GetRequeued() bool {
+	if x != nil {
+		return x.Requeued
+	}
+	return false
+}
+
 var File_switch_v1_switch_proto protoreflect.FileDescriptor
 
 const file_switch_v1_switch_proto_rawDesc = "" +
@@ -265,14 +374,21 @@ const file_switch_v1_switch_proto_rawDesc = "" +
 	"\treference\x18\x01 \x01(\tR\treference\x121\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x19.switch.v1.CallbackStatusR\x06status\",\n" +
 	"\x14RailCallbackResponse\x12\x14\n" +
-	"\x05state\x18\x01 \x01(\tR\x05state*l\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state\"Q\n" +
+	"\x19CorrectiveReversalRequest\x12\x1c\n" +
+	"\treference\x18\x01 \x01(\tR\treference\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"N\n" +
+	"\x1aCorrectiveReversalResponse\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state\x12\x1a\n" +
+	"\brequeued\x18\x02 \x01(\bR\brequeued*l\n" +
 	"\x0eCallbackStatus\x12\x1f\n" +
 	"\x1bCALLBACK_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CALLBACK_STATUS_SUCCESS\x10\x01\x12\x1c\n" +
-	"\x18CALLBACK_STATUS_DECLINED\x10\x022\x99\x01\n" +
+	"\x18CALLBACK_STATUS_DECLINED\x10\x022\xfc\x01\n" +
 	"\rSwitchService\x127\n" +
 	"\x04Ping\x12\x16.switch.v1.PingRequest\x1a\x17.switch.v1.PingResponse\x12O\n" +
-	"\fRailCallback\x12\x1e.switch.v1.RailCallbackRequest\x1a\x1f.switch.v1.RailCallbackResponseBEZCgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1b\x06proto3"
+	"\fRailCallback\x12\x1e.switch.v1.RailCallbackRequest\x1a\x1f.switch.v1.RailCallbackResponse\x12a\n" +
+	"\x12CorrectiveReversal\x12$.switch.v1.CorrectiveReversalRequest\x1a%.switch.v1.CorrectiveReversalResponseBEZCgithub.com/Philip-Nwabuwa/Invariant-Core/api/gen/switch/v1;switchv1b\x06proto3"
 
 var (
 	file_switch_v1_switch_proto_rawDescOnce sync.Once
@@ -287,22 +403,26 @@ func file_switch_v1_switch_proto_rawDescGZIP() []byte {
 }
 
 var file_switch_v1_switch_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_switch_v1_switch_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_switch_v1_switch_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_switch_v1_switch_proto_goTypes = []any{
-	(CallbackStatus)(0),          // 0: switch.v1.CallbackStatus
-	(*PingRequest)(nil),          // 1: switch.v1.PingRequest
-	(*PingResponse)(nil),         // 2: switch.v1.PingResponse
-	(*RailCallbackRequest)(nil),  // 3: switch.v1.RailCallbackRequest
-	(*RailCallbackResponse)(nil), // 4: switch.v1.RailCallbackResponse
+	(CallbackStatus)(0),                // 0: switch.v1.CallbackStatus
+	(*PingRequest)(nil),                // 1: switch.v1.PingRequest
+	(*PingResponse)(nil),               // 2: switch.v1.PingResponse
+	(*RailCallbackRequest)(nil),        // 3: switch.v1.RailCallbackRequest
+	(*RailCallbackResponse)(nil),       // 4: switch.v1.RailCallbackResponse
+	(*CorrectiveReversalRequest)(nil),  // 5: switch.v1.CorrectiveReversalRequest
+	(*CorrectiveReversalResponse)(nil), // 6: switch.v1.CorrectiveReversalResponse
 }
 var file_switch_v1_switch_proto_depIdxs = []int32{
 	0, // 0: switch.v1.RailCallbackRequest.status:type_name -> switch.v1.CallbackStatus
 	1, // 1: switch.v1.SwitchService.Ping:input_type -> switch.v1.PingRequest
 	3, // 2: switch.v1.SwitchService.RailCallback:input_type -> switch.v1.RailCallbackRequest
-	2, // 3: switch.v1.SwitchService.Ping:output_type -> switch.v1.PingResponse
-	4, // 4: switch.v1.SwitchService.RailCallback:output_type -> switch.v1.RailCallbackResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
+	5, // 3: switch.v1.SwitchService.CorrectiveReversal:input_type -> switch.v1.CorrectiveReversalRequest
+	2, // 4: switch.v1.SwitchService.Ping:output_type -> switch.v1.PingResponse
+	4, // 5: switch.v1.SwitchService.RailCallback:output_type -> switch.v1.RailCallbackResponse
+	6, // 6: switch.v1.SwitchService.CorrectiveReversal:output_type -> switch.v1.CorrectiveReversalResponse
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -319,7 +439,7 @@ func file_switch_v1_switch_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_switch_v1_switch_proto_rawDesc), len(file_switch_v1_switch_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -300,6 +300,14 @@ func (d *Driver) HandleRailCallback(ctx context.Context, reference string, verdi
 	return stateForStatus(cur.Status), nil
 }
 
+// RequeueReversal re-drives a stranded reversal for a transfer (looked up by
+// reference), used by the reconcile corrective endpoint (NS-502). It delegates
+// to the store, which re-appends the reversal event only when the transfer is
+// awaiting reversal; the poller then re-runs the idempotent handleReversal.
+func (d *Driver) RequeueReversal(ctx context.Context, reference string) (State, bool, error) {
+	return d.store.RequeueReversal(ctx, reference)
+}
+
 // transferEventPayload is the JSON body of a transfer outbox event. The handler
 // re-loads the row for the authoritative status, so the payload is informational
 // (and useful for debugging the outbox).

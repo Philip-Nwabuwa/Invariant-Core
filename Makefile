@@ -72,3 +72,6 @@ run-mockrail: ## Run the mock NIP rail
 
 reconcile: ## Run reconciliation. Usage: make reconcile INTERNAL=path EXTERNAL=path [RECON_ARGS="--format json --no-persist"]
 	go run ./cmd/reconcile run --internal "$(INTERNAL)" --external "$(EXTERNAL)" $(RECON_ARGS)
+
+load: ## Run the k6 transfer load test (NS-504). Needs a live switchd + seeded accounts. Vars: RATE, DURATION, BASE_URL.
+	k6 run test/load/transfers.js

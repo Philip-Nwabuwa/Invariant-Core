@@ -5,7 +5,6 @@ package transport
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -76,15 +75,19 @@ type transferResponse struct {
 	State       string       `json:"state"`
 }
 
-// errorResponse is the JSON body of an error.
+// errorResponse is the structured JSON body of an error (NS-506): a stable
+// machine-readable code, a human-readable message, and the request's correlation
+// id so a caller can quote it when reporting a problem.
 type errorResponse struct {
-	Error string `json:"error"`
+	Code          string `json:"code"`
+	Message       string `json:"message"`
+	CorrelationID string `json:"correlation_id,omitempty"`
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get(idempotencyHeader)
 	if key == "" {
-		writeError(w, http.StatusBadRequest, transfer.ErrMissingIdempotencyKey)
+		writeError(w, r, transfer.ErrMissingIdempotencyKey)
 		return
 	}
 
@@ -92,7 +95,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, errors.New("invalid JSON body"))
+		writeError(w, r, errInvalidJSONBody)
 		return
 	}
 
@@ -106,7 +109,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 
 	view, err := h.svc.Create(r.Context(), key, req)
 	if err != nil {
-		writeError(w, statusFor(err), err)
+		writeError(w, r, err)
 		return
 	}
 	// 202 Accepted: the transfer is durably accepted and debited, but settlement
@@ -119,7 +122,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	view, err := h.svc.Get(r.Context(), id)
 	if err != nil {
-		writeError(w, statusFor(err), err)
+		writeError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toResponse(view))
@@ -137,30 +140,28 @@ func toResponse(v transfer.View) transferResponse {
 	}
 }
 
-// statusFor maps a domain error to an HTTP status code. Unknown errors are 500.
-func statusFor(err error) int {
-	switch {
-	case errors.Is(err, transfer.ErrNotFound):
-		return http.StatusNotFound
-	case errors.Is(err, transfer.ErrIdempotencyConflict),
-		errors.Is(err, transfer.ErrInProgress):
-		return http.StatusConflict
-	case errors.Is(err, transfer.ErrMissingIdempotencyKey),
-		errors.Is(err, transfer.ErrNonPositiveAmount),
-		errors.Is(err, transfer.ErrUnknownCurrency),
-		errors.Is(err, transfer.ErrMissingField):
-		return http.StatusBadRequest
-	default:
-		return http.StatusInternalServerError
-	}
-}
-
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
 }
 
-func writeError(w http.ResponseWriter, status int, err error) {
-	writeJSON(w, status, errorResponse{Error: err.Error()})
+// writeError renders the structured error body (NS-506): it classifies err into
+// a stable code + HTTP status, attaches the request's correlation id, and (for a
+// transient 503) hints the client to retry. The message is the error text for
+// client-actionable failures and a generic line for an opaque 500.
+func writeError(w http.ResponseWriter, r *http.Request, err error) {
+	ae := classify(err)
+	msg := err.Error()
+	if ae.status == http.StatusInternalServerError {
+		msg = "internal error"
+	}
+	if ae.status == http.StatusServiceUnavailable {
+		w.Header().Set("Retry-After", "1")
+	}
+	writeJSON(w, ae.status, errorResponse{
+		Code:          ae.code,
+		Message:       msg,
+		CorrelationID: logging.CorrelationID(r.Context()),
+	})
 }

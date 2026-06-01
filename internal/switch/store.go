@@ -280,6 +280,29 @@ func (s *PostgresStore) markFailed(ctx context.Context, id uuid.UUID) (bool, err
 	})
 }
 
+// RequeueReversal re-drives a stranded reversal for the transfer identified by
+// reference (the reconcile corrective path, NS-501/502). If the transfer is
+// awaiting reversal it re-appends reversal.requested so the poller re-runs
+// handleReversal — itself idempotent, so a re-drive never double-reverses. A
+// transfer already reversed, or in any other status, is a safe no-op. It returns
+// the current externalized state and whether it actually re-enqueued.
+func (s *PostgresStore) RequeueReversal(ctx context.Context, reference string) (State, bool, error) {
+	det, err := s.loadByReference(ctx, reference)
+	if err != nil {
+		return "", false, err
+	}
+	if det.Status != statusReversalPending {
+		// Already reversed, or never reached reversal_pending — nothing to do.
+		return stateForStatus(det.Status), false, nil
+	}
+	if err := s.WithTx(ctx, func(q *switchdb.Queries) error {
+		return outbox.Append(ctx, q, det.ID, outbox.EventReversalRequested, det.eventPayload())
+	}); err != nil {
+		return "", false, err
+	}
+	return stateForStatus(det.Status), true, nil
+}
+
 // Get returns the read-model View for a transfer, or ErrNotFound.
 func (s *PostgresStore) Get(ctx context.Context, id uuid.UUID) (View, error) {
 	d, err := s.load(ctx, id)

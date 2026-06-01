@@ -21,9 +21,13 @@ jobs:
       - run: go build ./...
       # Unit + property tests. From Sprint 1 the ledger tests use testcontainers
       # (Postgres) and run here against the Docker daemon available on
-      # ubuntu-latest; they skip cleanly when Docker is unreachable. The broader
-      # tagged integration suite (-tags=integration) arrives in Sprint 5.
+      # ubuntu-latest; they skip cleanly when Docker is unreachable.
       - run: go test ./... -race -count=1
+      # Sprint 5 (NS-503): the tagged integration suite — real-Postgres
+      # serializable posting, idempotent replay, reversal recovery after a
+      # simulated restart. ubuntu-latest provides the Docker daemon testcontainers
+      # needs; the suite skips cleanly if it is ever unreachable.
+      - run: make test-integration
 
   lint:
     name: lint

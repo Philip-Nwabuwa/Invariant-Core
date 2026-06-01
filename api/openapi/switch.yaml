@@ -43,13 +43,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/Transfer"
         "400":
-          description: Validation error (missing header/field, non-positive amount, unknown currency, malformed JSON).
+          description: >
+            Validation error. Body code is `missing_idempotency_key` (no
+            Idempotency-Key header) or `validation_error` (missing/empty field,
+            non-positive amount, unknown currency, malformed JSON).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: The same Idempotency-Key was reused with a different request body.
+          description: >
+            Conflict. Body code is `idempotency_conflict` (the same
+            Idempotency-Key reused with a different request body) or `in_progress`
+            (a request with this key is still being processed).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: >
+            Transient backpressure (code `unavailable`): the ledger's SERIALIZABLE
+            write exhausted its serialization-retry budget under contention. Safe
+            to retry; honour the Retry-After header.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
           content:
             application/json:
               schema:
@@ -123,6 +143,23 @@ components:
           enum: [INITIATED, DEBIT_PENDING, DEBITED, AWAITING_SETTLEMENT, SETTLED, IN_DOUBT, REVERSAL_PENDING, REVERSED, MANUAL_REVIEW, FAILED]
     Error:
       type: object
+      description: Structured error body. Clients branch on `code`, not `message`.
+      required: [code, message]
       properties:
-        error:
+        code:
           type: string
+          description: Stable, machine-readable error code.
+          enum:
+            - missing_idempotency_key
+            - validation_error
+            - idempotency_conflict
+            - in_progress
+            - not_found
+            - unavailable
+            - internal
+        message:
+          type: string
+          description: Human-readable detail. Opaque for `internal`.
+        correlation_id:
+          type: string
+          description: Echo of the request's X-Correlation-ID, for support/tracing.
