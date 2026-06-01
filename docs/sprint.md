@@ -308,12 +308,13 @@ Source of truth for Sprint 5 progress. Same rule: implement → verify → tick 
 ## NS-506 · Error taxonomy + structured REST errors
 - [x] Define an error taxonomy; map domain errors to structured REST error responses (stable codes, JSON body) on the public API. (`internal/switch/transport/errors.go`: stable codes `missing_idempotency_key` / `validation_error` / `idempotency_conflict` / `in_progress` / `not_found` / `unavailable` / `internal`, each mapped via `classify` to a `{code, httpStatus}`. The REST body is now `{code, message, correlation_id}` (`errorResponse`), with `message` opaque ("internal error") for a 500 so internals never leak, and the request's `X-Correlation-ID` echoed. Ledger backpressure (NS-505) propagates as gRPC `Unavailable` → `unavailable`/`503` + `Retry-After`. `api/openapi/switch.yaml` documents the structured shape, the code enum, and the 503. Tests assert per-case codes, the structured mapping (conflict/in-progress/backpressure/opaque-internal), and correlation-id echo.)
 
-## Verification (Sprint 5 DoD)
-1. [ ] Inject a stuck `pending_reversal`; reconcile feeds switchd; the re-reversal fires; the next run shows it resolved (AC-5).
-2. [ ] `make test-integration` green locally and in CI.
-3. [ ] A k6 run records throughput + p99 against NFR-2/3 with a dashboard screenshot (AC-6).
-4. [ ] The load run shows graceful behavior under serialization retries (no stranded debits, bounded latency).
-5. [ ] REST errors return structured, documented shapes.
+## Verification (Sprint 5 DoD) — ✅ PASSED 2026-06-01
+1. [x] Inject a stuck `pending_reversal`; reconcile feeds switchd; the re-reversal fires; the next run shows it resolved (AC-5). (`scripts/feedback_loop_demo.sh` runs the real ledger/declining-mockrail/switchd binaries: fires a transfer the rail declines, stops the ledger so `handleReversal` can't post → transfer parks in `reversal_pending`, deletes its unpublished outbox event to strand it, restarts the ledger, then runs the real `reconcile run --switch-addr localhost:50052` over a crafted internal/external pair. Verified live: run #1 detected `pending_reversal=1` and logged `requeued=true`; the transfer reached `REVERSED` with the source restored (1007700→1007700) and exactly one reversal row; run #2 reported `pending_reversal=0`. The mechanism is also covered by `TestCorrectiveReversal_RedrivesStrandedReversal`.)
+2. [x] `make test-integration` green locally and in CI. (Local: `ok test/integration 13.3s` with `-race -tags=integration`; CI build-test job runs `make test-integration` after the untagged suite.)
+3. [x] A k6 run records throughput + p99 against NFR-2/3 with a dashboard screenshot (AC-6). (`deployments/grafana/load-dashboard.png`. Sustainable load p95≈20 ms / max≈38 ms (p99 < 250 ms ✓ NFR-3); single-node throughput saturates ~5–6 tps on the shared `SETTLEMENT` account, so ≥500 tps NFR-2 needs the ADR-0002 sharding mitigation held in reserve. Numbers recorded under NS-504.)
+4. [x] The load run shows graceful behavior under serialization retries (no stranded debits, bounded latency). (Across the session: 3251 settled, **0 failed, 0 stranded, 0 dead-letters**; 3724 serialization retries absorbed by the bounded loop, 18 budget-exhaustions surfaced as graceful `503`/`Unavailable` and retried. The system degraded by growing latency, never by breaking an invariant.)
+5. [x] REST errors return structured, documented shapes. (`{code, message, correlation_id}` with stable codes; `api/openapi/switch.yaml` documents the code enum + the 503; covered by `rest_test.go`.)
+6. [x] Whole-repo gates: `go test ./... -race` green (all packages, incl. `test/chaos`); `make lint` 0 issues; `make proto` + `make sqlc` regenerate with no diff.
 
 ---
 
