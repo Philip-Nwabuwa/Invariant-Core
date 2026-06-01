@@ -214,6 +214,10 @@ func postErrToStatus(err error) error {
 		errors.Is(err, ErrMixedCurrency),
 		errors.Is(err, ErrNonPositiveAmount):
 		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, ErrSerializationExhausted):
+		// Transient backpressure (ADR-0002): Unavailable signals the caller to
+		// retry rather than treating it as a terminal fault.
+		return status.Error(codes.Unavailable, err.Error())
 	default:
 		return status.Error(codes.Internal, err.Error())
 	}

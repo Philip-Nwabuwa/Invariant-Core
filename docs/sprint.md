@@ -303,7 +303,7 @@ Source of truth for Sprint 5 progress. Same rule: implement → verify → tick 
 - [ ] Capture achieved throughput + p99 and a dashboard screenshot.
 
 ## NS-505 · Backpressure / serialization-retry on the ledger path (ADR-0002)
-- [ ] Bounded retry + backpressure on `40001` serialization failures so the SERIALIZABLE ledger path degrades gracefully under load.
+- [x] Bounded retry + backpressure on `40001` serialization failures so the SERIALIZABLE ledger path degrades gracefully under load. (The bounded retry loop already existed; NS-505 instruments it and surfaces graceful backpressure. New `internal/ledger/metrics.go` SLIs `ledger_serialization_retries_total` + `ledger_serialization_exhausted_total` (ADR-0002 names the retry rate first-class); `retryOnSerialization` counts each retry and, on an exhausted budget, wraps the 40001 in the exported `ErrSerializationExhausted`. `postErrToStatus` maps it to `codes.Unavailable` — transient, not a fault — and the switch driver's `isTerminalLedgerError` leaves `Unavailable` non-terminal, so the outbox poller retries rather than failing the transfer closed. `cmd/ledger` owns the registry and serves the SLIs on `/metrics`. Tests: `TestRetry_*` (exhaustion wraps + counts, transient clears, non-40001 passes through), `TestPostErr_ExhaustionMapsToUnavailable`, `TestIsTerminalLedgerError_BackpressureIsTransient`.)
 
 ## NS-506 · Error taxonomy + structured REST errors
 - [ ] Define an error taxonomy; map domain errors to structured REST error responses (stable codes, JSON body) on the public API.

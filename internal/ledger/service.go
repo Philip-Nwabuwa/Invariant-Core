@@ -36,12 +36,26 @@ const maxSerializationRetries = 5
 
 // Service is the ledger's domain API.
 type Service struct {
-	repo *postgres.Repository
+	repo    *postgres.Repository
+	metrics *Metrics // optional; nil-safe
+}
+
+// ServiceOption customizes a Service.
+type ServiceOption func(*Service)
+
+// WithMetrics wires the serialization-retry SLIs (NS-505, ADR-0002) so the
+// service counts retries and exhaustion on the SERIALIZABLE write path.
+func WithMetrics(m *Metrics) ServiceOption {
+	return func(s *Service) { s.metrics = m }
 }
 
 // NewService builds a Service over the given repository.
-func NewService(repo *postgres.Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo *postgres.Repository, opts ...ServiceOption) *Service {
+	s := &Service{repo: repo}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // PostTransaction validates the request and records it as a balanced set of
@@ -70,7 +84,7 @@ func (s *Service) PostTransaction(ctx context.Context, req PostRequest) (uuid.UU
 	}
 
 	var txID uuid.UUID
-	err = retryOnSerialization(ctx, maxSerializationRetries, func() error {
+	err = retryOnSerialization(ctx, maxSerializationRetries, s.metrics, func() error {
 		return s.repo.WithSerializableTx(ctx, func(q *ledgerdb.Queries) error {
 			accounts, err := resolveAccounts(ctx, q, req.Entries)
 			if err != nil {
