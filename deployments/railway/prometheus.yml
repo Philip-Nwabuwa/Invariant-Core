@@ -1,0 +1,25 @@
+# Prometheus scrape config for the Railway deployment. Unlike the local
+# docker-compose config (which uses host.docker.internal), here Prometheus
+# reaches the services over Railway's private network by their service DNS
+# names: <service-name>.railway.internal. Name the Railway services exactly
+# `ledger`, `switchd`, and `mockrail` for these targets to resolve.
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: switchd
+    static_configs:
+      - targets: ["switchd.railway.internal:8080"]
+        labels:
+          service: switchd
+  - job_name: ledger
+    static_configs:
+      - targets: ["ledger.railway.internal:8081"]
+        labels:
+          service: ledger
+  - job_name: mockrail
+    static_configs:
+      - targets: ["mockrail.railway.internal:8082"]
+        labels:
+          service: mockrail

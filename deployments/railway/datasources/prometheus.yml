@@ -1,0 +1,14 @@
+# Grafana datasource for the Railway deployment. Points at the Prometheus
+# service over Railway's private network (the local variant uses the compose
+# service name `prometheus`). Name the Railway Prometheus service exactly
+# `prometheus` for this to resolve.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus.railway.internal:9090
+    isDefault: true
+    editable: true

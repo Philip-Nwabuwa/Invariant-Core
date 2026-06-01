@@ -1,13 +1,16 @@
 {
   "info": {
-    "name": "Invariant Core — Sprint 0",
-    "description": "Manual-testing collection for the Invariant Core walking skeleton. Sprint 0 exposes only /healthz and /metrics per service; the transfer REST API arrives in Sprint 2 and drops into a new \"Transfers\" folder. Service URLs are collection variables (ledger_url, switchd_url, mockrail_url) so the collection retargets without editing requests.",
+    "name": "Invariant Core",
+    "description": "Manual-testing collection for Invariant Core. Health + Metrics cover the three service binaries (ledger :8081, switchd :8080, mockrail :8082). Transfers drives the public REST API on switchd (api/openapi/switch.yaml, v0.3.0): create a transfer with a required Idempotency-Key, poll until terminal (SETTLED / REVERSED / FAILED / MANUAL_REVIEW), and exercise idempotent replay, conflict, and validation. Service URLs are collection variables so the collection retargets (e.g. to a Railway domain) without editing requests. Run the Transfers folder top-to-bottom; the happy-path request seeds idempotency_key / transfer_id / transfer_reference for the requests after it.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "ledger_url", "value": "http://localhost:8081", "type": "string" },
     { "key": "switchd_url", "value": "http://localhost:8080", "type": "string" },
-    { "key": "mockrail_url", "value": "http://localhost:8082", "type": "string" }
+    { "key": "mockrail_url", "value": "http://localhost:8082", "type": "string" },
+    { "key": "idempotency_key", "value": "", "type": "string" },
+    { "key": "transfer_id", "value": "", "type": "string" },
+    { "key": "transfer_reference", "value": "", "type": "string" }
   ],
   "item": [
     {
@@ -161,6 +164,367 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "Transfers",
+      "description": "The public transfer API on switchd. Run these in order: 'Create transfer' seeds the idempotency_key, transfer_id, and transfer_reference variables the rest depend on.",
+      "item": [
+        {
+          "name": "Create transfer (happy path)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Fresh idempotency key + reference for a brand-new transfer.",
+                  "pm.collectionVariables.set('idempotency_key', (pm.variables.replaceIn('{{$guid}}')));",
+                  "pm.collectionVariables.set('transfer_reference', 'NIP-PM-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "var json = pm.response.json();",
+                  "pm.test('returns a transfer id', function () { pm.expect(json.id).to.be.a('string').and.not.empty; });",
+                  "pm.test('reference echoes the request', function () { pm.expect(json.reference).to.eql(pm.collectionVariables.get('transfer_reference')); });",
+                  "pm.test('state is an accepted lifecycle value', function () {",
+                  "  pm.expect(json.state).to.be.oneOf(['INITIATED','DEBIT_PENDING','DEBITED','AWAITING_SETTLEMENT','SETTLED','IN_DOUBT','REVERSAL_PENDING','REVERSED','MANUAL_REVIEW','FAILED']);",
+                  "});",
+                  "pm.collectionVariables.set('transfer_id', json.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{transfer_reference}}\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 500000,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Create a transfer. POST debits synchronously and returns 202 at DEBITED; settlement completes asynchronously via the outbox — use 'Get transfer' to poll until a terminal state."
+          }
+        },
+        {
+          "name": "Get transfer (poll until terminal)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "pm.test('id matches the created transfer', function () { pm.expect(json.id).to.eql(pm.collectionVariables.get('transfer_id')); });",
+                  "pm.test('state is a known lifecycle value', function () {",
+                  "  pm.expect(json.state).to.be.oneOf(['INITIATED','DEBIT_PENDING','DEBITED','AWAITING_SETTLEMENT','SETTLED','IN_DOUBT','REVERSAL_PENDING','REVERSED','MANUAL_REVIEW','FAILED']);",
+                  "});",
+                  "console.log('transfer ' + json.id + ' state=' + json.state);",
+                  "// Re-send this request until state is terminal (SETTLED / REVERSED / FAILED / MANUAL_REVIEW)."
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers/{{transfer_id}}",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers", "{{transfer_id}}"]
+            },
+            "description": "Fetch the current transfer view. With no rail chaos the transfer settles within a moment; re-send until state is SETTLED."
+          }
+        },
+        {
+          "name": "Idempotent replay (same key, same body)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "var json = pm.response.json();",
+                  "pm.test('returns the SAME transfer id (no new transfer)', function () {",
+                  "  pm.expect(json.id).to.eql(pm.collectionVariables.get('transfer_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{transfer_reference}}\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 500000,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Replays the happy-path request verbatim (same Idempotency-Key + same body). The switch returns the stored result and does NOT create a second transfer."
+          }
+        },
+        {
+          "name": "Conflict (same key, different body)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('code is idempotency_conflict', function () { pm.expect(pm.response.json().code).to.eql('idempotency_conflict'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{transfer_reference}}\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 999999,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Reuses the same Idempotency-Key with a changed amount_minor. The switch rejects it with 409 idempotency_conflict — a key may only ever name one request."
+          }
+        },
+        {
+          "name": "Missing Idempotency-Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code is missing_idempotency_key', function () { pm.expect(pm.response.json().code).to.eql('missing_idempotency_key'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"NIP-PM-NOKEY\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 500000,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Omits the required Idempotency-Key header. The switch rejects it with 400 missing_idempotency_key before doing any work."
+          }
+        },
+        {
+          "name": "Validation error (non-positive amount)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code is validation_error', function () { pm.expect(pm.response.json().code).to.eql('validation_error'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"NIP-PM-ZERO\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 0,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "amount_minor must be a positive integer (kobo). Zero or negative is rejected with 400 validation_error before any money moves."
+          }
+        },
+        {
+          "name": "Validation error (unknown currency)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('code is validation_error', function () { pm.expect(pm.response.json().code).to.eql('validation_error'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"NIP-PM-CCY\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 500000,\n  \"currency\": \"USD\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Only NGN is supported in v1. Any other currency is rejected with 400 validation_error."
+          }
+        },
+        {
+          "name": "Not found (unknown transfer id)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "pm.test('code is not_found', function () { pm.expect(pm.response.json().code).to.eql('not_found'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers/00000000-0000-0000-0000-000000000000",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers", "00000000-0000-0000-0000-000000000000"]
+            },
+            "description": "Fetching a transfer id that does not exist returns 404 not_found with the structured error body."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lifecycle outcomes (chaos)",
+      "description": "Drive non-happy-path outcomes. A transfer's terminal state depends on how the rail behaves, which you control by restarting mockrail with env knobs (the REST request never changes):\n\n- Clean (default):            go run ./cmd/mockrail                                  -> SETTLED\n- Decline:    MOCKRAIL_P_DECLINE=1.0 go run ./cmd/mockrail                          -> REVERSED (source refunded)\n- In-doubt:   MOCKRAIL_P_TIMEOUT=1.0 MOCKRAIL_P_TSQ_TIMEOUT=1.0 go run ./cmd/mockrail -> MANUAL_REVIEW (held in suspense)\n- Slow:       MOCKRAIL_LATENCY_MS=3000 go run ./cmd/mockrail                        -> SETTLED after a delay\n\nRestart with: pkill -f exe/mockrail; <MODE> go run ./cmd/mockrail\n\nThen run 'Create transfer (chaos)' followed by 'Get until terminal'. In the Collection Runner / newman the Get auto-polls itself until the transfer reaches a terminal state; with a single manual Send in the app, just click Send again until the state stops changing.",
+      "item": [
+        {
+          "name": "Create transfer (chaos)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('idempotency_key', pm.variables.replaceIn('{{$guid}}'));",
+                  "pm.collectionVariables.set('transfer_reference', 'NIP-CHAOS-' + Date.now());",
+                  "pm.collectionVariables.set('poll_tries', '0');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 202', function () { pm.response.to.have.status(202); });",
+                  "var json = pm.response.json();",
+                  "pm.collectionVariables.set('transfer_id', json.id);",
+                  "console.log('created ' + json.id + ' (state ' + json.state + ') — poll to see its true outcome');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reference\": \"{{transfer_reference}}\",\n  \"source\": \"CUST-001\",\n  \"destination\": \"CUST-002\",\n  \"amount_minor\": 250000,\n  \"currency\": \"NGN\"\n}"
+            },
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers"]
+            },
+            "description": "Creates a transfer to be driven to whatever terminal state the current mockrail mode dictates. Always returns 202 at DEBITED — the outcome is decided asynchronously."
+          }
+        },
+        {
+          "name": "Get until terminal",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var terminal = ['SETTLED', 'REVERSED', 'FAILED', 'MANUAL_REVIEW'];",
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "var json = pm.response.json();",
+                  "var tries = parseInt(pm.collectionVariables.get('poll_tries') || '0', 10) + 1;",
+                  "pm.collectionVariables.set('poll_tries', String(tries));",
+                  "if (terminal.indexOf(json.state) === -1 && tries < 25) {",
+                  "  // settlement/reversal is async via the outbox; wait ~600ms then re-poll.",
+                  "  var t = Date.now(); while (Date.now() - t < 600) { /* busy-wait */ }",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.collectionVariables.set('poll_tries', '0');",
+                  "  pm.test('reached a terminal state', function () { pm.expect(json.state).to.be.oneOf(terminal); });",
+                  "  console.log('terminal state for ' + json.id + ' = ' + json.state);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{switchd_url}}/v1/transfers/{{transfer_id}}",
+              "host": ["{{switchd_url}}"],
+              "path": ["v1", "transfers", "{{transfer_id}}"]
+            },
+            "description": "Polls the transfer until it reaches a terminal state. In a Runner/newman run this request re-queues itself (up to 25 times, ~600ms apart) until the state is SETTLED / REVERSED / FAILED / MANUAL_REVIEW, then asserts it got there. Single manual Sends in the app won't loop — just click Send again."
+          }
         }
       ]
     }
