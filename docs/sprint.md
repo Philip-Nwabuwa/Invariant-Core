@@ -337,7 +337,7 @@ Source of truth for Sprint 6 progress. Same rule: implement → verify → tick 
 - [ ] One script: fire transfers under chaos → show zero stranded debits → run reconcile → trigger a re-reversal → show it resolved.
 
 ## NS-604 · Complete the ADRs
-- [ ] Fill `docs/adr/0001…0005` from stubs to full context → decision → consequences.
+- [x] Fill `docs/adr/0001…0005` from stubs to full context → decision → consequences. (All five are complete context→decision→consequences docs: 0001 integer money, 0002 serializable ledger + the SETTLEMENT-hotspot retry SLI, 0003 durable idempotency + the finalized `in_progress` replay contract, 0004 transactional outbox, 0005 canonical record. No stub/TODO markers remain; ADR-0003's forward-looking "to finalize" wording tidied to read as finalized post-NS-202.)
 
 ## NS-605 · Build-log posts
 - [ ] Write the ROADMAP portfolio-checkpoint posts (after Sprints 1/3/4/5), each leading with the Nigerian number + the engineering decision + the rejected alternative.
