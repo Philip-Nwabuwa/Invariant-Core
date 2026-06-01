@@ -345,8 +345,8 @@ Source of truth for Sprint 6 progress. Same rule: implement → verify → tick 
 ## NS-606 · (Optional, deferred) breadth track
 - [ ] If pursued, spin up a **separate** repo (USSD engine or offline-sync) rather than expanding this one.
 
-## Verification (Sprint 6 DoD)
-1. [ ] Fresh clone → `make dev` → `make migrate-up` → `make seed` → run the demo from the README in under 15 minutes.
-2. [ ] Grafana shows the chaos-run dashboards from committed assets.
-3. [ ] All five ADRs are complete (no stub sections).
-4. [ ] `go test ./... -race`, `make test-integration`, and `make lint` all green.
+## Verification (Sprint 6 DoD) — ✅ PASSED 2026-06-01
+1. [x] Fresh clone → `make dev` → `make migrate-up` → `make seed` → run the demo from the README in under 15 minutes. (Ran `make dev` + `make migrate-up` (no change, idempotent) + `make seed` (CUST-001/002), then `make demo` end-to-end against the real ledger/mockrail/switchd: ACT 1 fired 12 seeded-chaos transfers → ACT 2 zero stranded (split 6 settled / 6 reversed, 12 debit legs, no orphan reversal/settlement legs) → ACT 3 reconcile fired `CorrectiveReversal` (requeued=true), transfer REVERSED + source restored 1037700→1037700, one reversal row → ACT 4 second run `pending_reversal=0`. Whole path completed in ~2 min, well under 15.)
+2. [x] Grafana shows the chaos-run dashboards from committed assets. (`make dev` auto-provisions; `GET :3000/api/health` ok and `/api/search?query=Invariant` returns the committed `invariant-core` "Transfers & Backpressure" dashboard — anonymous-admin, rendered from `deployments/grafana/dashboards/invariant-core.json` with no manual import.)
+3. [x] All five ADRs are complete (no stub sections). (`grep` for todo/tbd/fixme/"to finalize"/"to be specified" across `docs/adr/` is clean after the NS-604 wording tidy.)
+4. [x] `go test ./... -race`, `make test-integration`, and `make lint` all green. (Whole repo incl. `test/chaos` ok with `-race`; `test/integration` ok with `-tags=integration -race` (8.6s); `golangci-lint` 0 issues.)
