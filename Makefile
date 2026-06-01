@@ -8,7 +8,8 @@ DB_URL ?= postgres://invariantcore:invariantcore@localhost:5432/invariantcore?ss
 MIGRATIONS_DIR := migrations
 
 .PHONY: help tools dev down logs migrate-up migrate-down sqlc proto seed gen-settlement \
-        build test test-integration lint run-ledger run-switchd run-mockrail reconcile
+        build test test-integration lint run-ledger run-switchd run-mockrail reconcile \
+        load demo
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -75,3 +76,6 @@ reconcile: ## Run reconciliation. Usage: make reconcile INTERNAL=path EXTERNAL=p
 
 load: ## Run the k6 transfer load test (NS-504). Needs a live switchd + seeded accounts. Vars: RATE, DURATION, BASE_URL.
 	k6 run test/load/transfers.js
+
+demo: ## End-to-end demo: chaos -> zero stranded debits -> reconcile -> re-reversal -> resolved. Needs make dev && make migrate-up && make seed.
+	./scripts/demo.sh
