@@ -1,0 +1,18 @@
+# Prometheus scrape config for the local stack (NS-504). Brought up by the
+# prometheus service in docker-compose.yml. Targets use host.docker.internal so
+# the container reaches the service binaries running on the host (make run-*).
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: switchd
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          service: switchd
+  - job_name: ledger
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+        labels:
+          service: ledger
