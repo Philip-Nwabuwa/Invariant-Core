@@ -295,8 +295,8 @@ Source of truth for Sprint 5 progress. Same rule: implement → verify → tick 
 - [x] The next reconcile run shows the exception resolved (AC-5). (`TestCorrectiveReversal_RedrivesStrandedReversal`: a transfer stranded in `reversal_pending` with its outbox event deleted is re-driven by the corrective call → source restored exactly once, SETTLEMENT nets to zero, one reversal row; second call is a no-op; unknown ref → NotFound. End-to-end AC-5 in the Sprint-5 DoD run.)
 
 ## NS-503 · testcontainers integration suite (NFR-9)
-- [ ] `test/integration` (`-tags=integration`): real-Postgres serializable posting, idempotent replays, reversal recovery after a simulated restart.
-- [ ] Wire `make test-integration` into CI.
+- [x] `test/integration` (`-tags=integration`): real-Postgres serializable posting, idempotent replays, reversal recovery after a simulated restart. (Three tagged tests over an in-process real stack (ledger gRPC + mockrail over bufconn + Postgres orchestrator/driver/outbox), mirroring `test/chaos`: `TestSerializablePosting` (balanced post → derived balances + unbalanced rejected), `TestIdempotentReplay` (same key/body → one row, altered body → conflict, through the production `IdempotentService`), `TestReversalRecoveryAfterRestart` (debit → drop outbox → recovery sweep + poller → reversed, no stranded debit). The only `//go:build integration`-tagged files in the repo.)
+- [x] Wire `make test-integration` into CI. (`.github/workflows/ci.yml` build-test job runs `make test-integration` after the untagged suite; ubuntu-latest provides the Docker daemon. Verified green locally with `-race`.)
 
 ## NS-504 · k6 load test (AC-6, NFR-2/3)
 - [ ] `test/load/transfers.js` — drive `POST /v1/transfers`; tune toward ≥500 tps / p99 < 250 ms (excluding the injected rail delay).
