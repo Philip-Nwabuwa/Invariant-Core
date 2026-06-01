@@ -36,8 +36,7 @@ type runSummary struct {
 // fingerprint, if one exists. The second return value is false when none is
 // found.
 func (s *Store) FindByFingerprint(ctx context.Context, fingerprint string) (uuid.UUID, bool, error) {
-	fp := fingerprint
-	run, err := s.q.FindCompletedRunByFingerprint(ctx, &fp)
+	run, err := s.q.FindCompletedRunByFingerprint(ctx, fingerprint)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return uuid.Nil, false, nil
@@ -66,7 +65,10 @@ func (s *Store) Persist(ctx context.Context, internalSrc, externalSrc, fingerpri
 
 	var runID uuid.UUID
 	err = s.withTx(ctx, func(q *recondb.Queries) error {
-		run, err := q.InsertReconRun(ctx, internalSrc, externalSrc)
+		run, err := q.InsertReconRun(ctx, recondb.InsertReconRunParams{
+			InternalSource: internalSrc,
+			ExternalSource: externalSrc,
+		})
 		if err != nil {
 			return fmt.Errorf("insert run: %w", err)
 		}

@@ -14,13 +14,13 @@ import (
 const findCompletedRunByFingerprint = `-- name: FindCompletedRunByFingerprint :one
 SELECT id, started_at, finished_at, internal_source, external_source, status, matched_count, exception_count, summary FROM recon_runs
 WHERE status = 'completed'
-  AND summary->>'input_fingerprint' = $1
+  AND summary->>'input_fingerprint' = $1::text
 ORDER BY started_at DESC
 LIMIT 1
 `
 
-func (q *Queries) FindCompletedRunByFingerprint(ctx context.Context, summary []byte) (ReconRun, error) {
-	row := q.db.QueryRow(ctx, findCompletedRunByFingerprint, summary)
+func (q *Queries) FindCompletedRunByFingerprint(ctx context.Context, dollar_1 string) (ReconRun, error) {
+	row := q.db.QueryRow(ctx, findCompletedRunByFingerprint, dollar_1)
 	var i ReconRun
 	err := row.Scan(
 		&i.ID,

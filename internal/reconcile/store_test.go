@@ -59,25 +59,25 @@ func TestStore_PersistAndIdempotentGuard(t *testing.T) {
 	}
 
 	// Exactly len(res.Exceptions) rows persisted; run counts correct.
-	if got := exceptionsForRun(t, ctx, pool, runID); got != len(res.Exceptions) {
+	if got := exceptionsForRun(ctx, t, pool, runID); got != len(res.Exceptions) {
 		t.Errorf("persisted exceptions = %d, want %d", got, len(res.Exceptions))
 	}
-	assertRunCounts(t, ctx, pool, runID, res.MatchedCount, len(res.Exceptions))
+	assertRunCounts(ctx, t, pool, runID, res.MatchedCount, len(res.Exceptions))
 
 	// AC-4: a re-run with the same fingerprint must not be persisted again. The
 	// CLI guard skips Persist when FindByFingerprint sees the prior run; assert
 	// the total exception row count is unchanged when the guard fires.
-	totalBefore := totalExceptions(t, ctx, pool)
+	totalBefore := totalExceptions(ctx, t, pool)
 	if _, found, _ := store.FindByFingerprint(ctx, fingerprint); !found {
 		t.Fatal("expected guard to find the prior run")
 	}
 	// No second Persist call — that is exactly what the guard prevents.
-	if totalAfter := totalExceptions(t, ctx, pool); totalAfter != totalBefore {
+	if totalAfter := totalExceptions(ctx, t, pool); totalAfter != totalBefore {
 		t.Errorf("exception rows changed without a persist: %d → %d", totalBefore, totalAfter)
 	}
 }
 
-func exceptionsForRun(t *testing.T, ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID) int {
+func exceptionsForRun(ctx context.Context, t *testing.T, pool *pgxpool.Pool, runID uuid.UUID) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM recon_exceptions WHERE run_id = $1", runID).Scan(&n); err != nil {
@@ -86,7 +86,7 @@ func exceptionsForRun(t *testing.T, ctx context.Context, pool *pgxpool.Pool, run
 	return n
 }
 
-func totalExceptions(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int {
+func totalExceptions(ctx context.Context, t *testing.T, pool *pgxpool.Pool) int {
 	t.Helper()
 	var n int
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM recon_exceptions").Scan(&n); err != nil {
@@ -95,7 +95,7 @@ func totalExceptions(t *testing.T, ctx context.Context, pool *pgxpool.Pool) int 
 	return n
 }
 
-func assertRunCounts(t *testing.T, ctx context.Context, pool *pgxpool.Pool, runID uuid.UUID, matched, exceptions int) {
+func assertRunCounts(ctx context.Context, t *testing.T, pool *pgxpool.Pool, runID uuid.UUID, matched, exceptions int) {
 	t.Helper()
 	var status string
 	var matchedCount, exceptionCount int

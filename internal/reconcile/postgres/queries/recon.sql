@@ -21,6 +21,6 @@ RETURNING *;
 -- name: FindCompletedRunByFingerprint :one
 SELECT * FROM recon_runs
 WHERE status = 'completed'
-  AND summary->>'input_fingerprint' = $1
+  AND summary->>'input_fingerprint' = $1::text
 ORDER BY started_at DESC
 LIMIT 1;
