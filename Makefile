@@ -46,8 +46,8 @@ proto: ## Generate gRPC code from protobuf (buf)
 seed: ## Create system + demo accounts
 	go run ./scripts/seed
 
-gen-settlement: ## Generate a settlement file with injected discrepancies
-	go run ./scripts/gen_settlement
+gen-settlement: ## Generate a fixture pair into ./out. Override with GEN_ARGS="--count N --discrepancies K --seed S"
+	go run ./scripts/gen_settlement --internal-out out/internal.jsonl --external-out out/settlement.csv $(GEN_ARGS)
 
 build: ## Build all binaries into ./bin
 	go build -o ./bin/ ./cmd/...
@@ -70,5 +70,5 @@ run-switchd: ## Run the switch (transfer engine)
 run-mockrail: ## Run the mock NIP rail
 	go run ./cmd/mockrail
 
-reconcile: ## Run reconciliation. Usage: make reconcile INTERNAL=path EXTERNAL=path
-	go run ./cmd/reconcile run --internal "$(INTERNAL)" --external "$(EXTERNAL)"
+reconcile: ## Run reconciliation. Usage: make reconcile INTERNAL=path EXTERNAL=path [RECON_ARGS="--format json --no-persist"]
+	go run ./cmd/reconcile run --internal "$(INTERNAL)" --external "$(EXTERNAL)" $(RECON_ARGS)
