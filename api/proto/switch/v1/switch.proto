@@ -12,6 +12,11 @@ service SwitchService {
   // idempotent: a duplicate callback for an already-terminal transfer is a
   // no-op (terminal-state guard), so the rail can safely deliver more than once.
   rpc RailCallback(RailCallbackRequest) returns (RailCallbackResponse);
+  // CorrectiveReversal re-drives a stranded reversal for the transfer identified
+  // by reference: reconcile calls it for each pending_reversal exception so the
+  // re-reversal posts through the existing outbox path. It is idempotent — a
+  // transfer already reversed (or not in reversal_pending) is a safe no-op.
+  rpc CorrectiveReversal(CorrectiveReversalRequest) returns (CorrectiveReversalResponse);
 }
 
 // PingRequest is an empty liveness request.
@@ -40,4 +45,19 @@ message RailCallbackRequest {
 // RailCallbackResponse reports the transfer's state after the callback applied.
 message RailCallbackResponse {
   string state = 1;
+}
+
+// CorrectiveReversalRequest identifies the transfer whose reversal must be
+// re-driven, plus a free-text reason for the audit trail.
+message CorrectiveReversalRequest {
+  string reference = 1;
+  string reason = 2;
+}
+
+// CorrectiveReversalResponse reports the transfer's state after the corrective
+// request applied, and whether it actually re-enqueued a reversal (false means
+// it was an idempotent no-op — already reversed or not awaiting reversal).
+message CorrectiveReversalResponse {
+  string state = 1;
+  bool requeued = 2;
 }

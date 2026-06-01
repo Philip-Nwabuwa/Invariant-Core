@@ -51,13 +51,14 @@ func runCmd() *cobra.Command {
 				return fmt.Errorf("bind flags: %w", err)
 			}
 			return runReconcile(cmd, config{
-				internal:  v.GetString("internal"),
-				external:  v.GetString("external"),
-				extFormat: v.GetString("external-format"),
-				window:    v.GetDuration("tolerance-window"),
-				format:    v.GetString("format"),
-				dbURL:     v.GetString("db-url"),
-				noPersist: v.GetBool("no-persist"),
+				internal:   v.GetString("internal"),
+				external:   v.GetString("external"),
+				extFormat:  v.GetString("external-format"),
+				window:     v.GetDuration("tolerance-window"),
+				format:     v.GetString("format"),
+				dbURL:      v.GetString("db-url"),
+				noPersist:  v.GetBool("no-persist"),
+				switchAddr: v.GetString("switch-addr"),
 			})
 		},
 	}
@@ -68,17 +69,19 @@ func runCmd() *cobra.Command {
 	c.Flags().String("format", "text", "report format: text|json")
 	c.Flags().String("db-url", serviceboot.EnvOr("DB_URL", defaultDBURL), "Postgres URL for run persistence")
 	c.Flags().Bool("no-persist", false, "skip writing the run to Postgres")
+	c.Flags().String("switch-addr", "", "switchd gRPC address for pending_reversal feedback (empty = no feedback)")
 	return c
 }
 
 type config struct {
-	internal  string
-	external  string
-	extFormat string
-	window    time.Duration
-	format    string
-	dbURL     string
-	noPersist bool
+	internal   string
+	external   string
+	extFormat  string
+	window     time.Duration
+	format     string
+	dbURL      string
+	noPersist  bool
+	switchAddr string
 }
 
 func runReconcile(cmd *cobra.Command, cfg config) error {
@@ -109,6 +112,15 @@ func runReconcile(cmd *cobra.Command, cfg config) error {
 	report := reconcile.NewReport(cfg.internal, cfg.external, res)
 	if err := render(cmd.OutOrStdout(), report, cfg.format); err != nil {
 		return err
+	}
+
+	// Close the loop (FR-F1): feed pending_reversal gaps back to switchd so the
+	// stranded reversal re-drives. Opt-in via --switch-addr; runs before persist
+	// so a feedback failure does not silently skip the durable record.
+	if cfg.switchAddr != "" {
+		if err := sendFeedback(ctx, cmd.ErrOrStderr(), cfg.switchAddr, res); err != nil {
+			return err
+		}
 	}
 
 	if cfg.noPersist {

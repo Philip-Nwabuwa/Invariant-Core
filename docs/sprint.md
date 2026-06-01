@@ -288,11 +288,11 @@ Source of truth for Sprint 5 progress. Same rule: implement → verify → tick 
 **Decisions:** reconcile emits `pending_reversal` exceptions to switchd (API/queue); switchd exposes a corrective endpoint that triggers a re-reversal through the existing outbox path; integration tests use `testcontainers-go` (`-tags=integration`, `make test-integration`); load via `k6` against NFR-2/3.
 
 ## NS-501 · Reconcile → switchd feedback (FR-F1)
-- [ ] On a `pending_reversal` exception, emit it to switchd (corrective API call or queue) carrying the offending reference/transaction.
+- [x] On a `pending_reversal` exception, emit it to switchd (corrective API call or queue) carrying the offending reference/transaction. (New `CorrectiveReversal` gRPC RPC on the switch surface `:50052`; `cmd/reconcile` gained an opt-in `--switch-addr` flag — when set, `sendFeedback` dials switchd and calls `CorrectiveReversal{reference, reason}` for every `pending_reversal` exception. Default empty = feedback off, preserving existing usage.)
 
 ## NS-502 · switchd corrective endpoint → re-reversal (AC-5)
-- [ ] switchd endpoint consumes the feedback and triggers a re-reversal through the existing outbox/reversal path.
-- [ ] The next reconcile run shows the exception resolved (AC-5).
+- [x] switchd endpoint consumes the feedback and triggers a re-reversal through the existing outbox/reversal path. (`GRPCServer.CorrectiveReversal` → `Driver.RequeueReversal` → `PostgresStore.RequeueReversal`: re-appends `reversal.requested` to the outbox only when the transfer is in `reversal_pending`; the running poller re-runs the idempotent `handleReversal`. Already-reversed/other status → `requeued=false` no-op; unknown reference → `NotFound`.)
+- [x] The next reconcile run shows the exception resolved (AC-5). (`TestCorrectiveReversal_RedrivesStrandedReversal`: a transfer stranded in `reversal_pending` with its outbox event deleted is re-driven by the corrective call → source restored exactly once, SETTLEMENT nets to zero, one reversal row; second call is a no-op; unknown ref → NotFound. End-to-end AC-5 in the Sprint-5 DoD run.)
 
 ## NS-503 · testcontainers integration suite (NFR-9)
 - [ ] `test/integration` (`-tags=integration`): real-Postgres serializable posting, idempotent replays, reversal recovery after a simulated restart.
