@@ -1,0 +1,18 @@
+# Keep the build context small. The service build needs go.mod/go.sum and the
+# Go source (cmd, internal, pkg, api); everything below is irrelevant to it.
+.git
+.github
+bin/
+out/
+reconcile
+*.test
+*.out
+coverage.*
+.env
+.DS_Store
+.gstack/
+node_modules
+docs/
+test/
+deployments/grafana/load-dashboard.png
+docker-compose.yml
